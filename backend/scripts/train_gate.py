@@ -7,6 +7,10 @@
     uv run python scripts/train_gate.py shared --stage pretrain --predict-roles test  # zero-shot
     uv run python scripts/train_gate.py shared --stage finetune --evaluation als \\
         --train-roles train finetune --val-roles val --predict-roles test
+    # fine-tune at lower learning rates (each tried with batch 8, or the --batch list)
+    uv run python scripts/train_gate.py shared --stage finetune --evaluation als \\
+        --train-roles train finetune --val-roles val --lr 1e-4 3e-5 --patience 40 \\
+        --predict-roles test
     # zero-shot predictions of the pretrained shared model
     uv run python scripts/train_gate.py predict --model-dir <models>/pretrain/shared/shared \\
         --evaluation als --method shared_zero_shot --roles test
@@ -30,6 +34,10 @@ def common(p: argparse.ArgumentParser) -> None:
     p.add_argument("--train-roles", nargs="+", default=["train"])
     p.add_argument("--val-roles", nargs="+", default=["val"])
     p.add_argument("--grid", action="store_true", help="lr {1e-3, 3e-4} x batch {4, 8}")
+    p.add_argument("--lr", type=float, nargs="+",
+                   help="learning rate(s) to try, replacing the grid's or the default 1e-3")
+    p.add_argument("--batch", type=int, nargs="+",
+                   help="batch size(s) to try, replacing the grid's or the default 8")
     p.add_argument("--epochs", type=int, default=100)
     p.add_argument("--patience", type=int, default=10)
     p.add_argument("--max-minutes", type=float, help="time budget per grid point")
@@ -68,7 +76,8 @@ def main() -> None:
         return
 
     run = {"train_roles": tuple(a.train_roles), "val_roles": tuple(a.val_roles),
-           "grid": a.grid, "epochs": a.epochs, "patience": a.patience, "threads": a.threads,
+           "grid": a.grid, "lrs": tuple(a.lr) if a.lr else None,
+           "batches": tuple(a.batch) if a.batch else None, "epochs": a.epochs, "patience": a.patience, "threads": a.threads,
            "seed": a.seed, "exclude": a.exclude,
            "max_seconds": a.max_minutes * 60 if a.max_minutes else None}
     if a.cmd == "unito":

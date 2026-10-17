@@ -23,7 +23,8 @@ from flow_er.ml import cache, images
 from flow_er.ml.unet import dataset as ds
 from flow_er.ml.unet.model import build
 
-GRID = [(lr, b) for lr in (1e-3, 3e-4) for b in (4, 8)]
+GRID_LRS, GRID_BATCHES = (1e-3, 3e-4), (4, 8)
+GRID = [(lr, b) for lr in GRID_LRS for b in GRID_BATCHES]
 DEFAULT = (1e-3, 8)
 SPLIT_VERSION = "split_v1"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -40,6 +41,8 @@ class Config:
     gate_keys: list[str] | None = None  # None = every gate in the selected files
     exclude: str | None = None          # regex on gate keys to leave out
     grid: bool = False
+    lrs: tuple[float, ...] | None = None      # override the learning rates (grid or fixed)
+    batches: tuple[int, ...] | None = None    # override the batch sizes (grid or fixed)
     epochs: int = 100
     patience: int = 10
     max_seconds: float | None = None    # per grid point
@@ -50,6 +53,13 @@ class Config:
     seed: int = 0
     out_name: str = "shared"            # last path part; per-gate runs use the gate_id
     extra: dict = field(default_factory=dict)
+
+
+def points(cfg: Config) -> list[tuple[float, int]]:
+    """(lr, batch) settings to train: the grid or the default, with either list overridden."""
+    lrs = cfg.lrs or (GRID_LRS if cfg.grid else (DEFAULT[0],))
+    batches = cfg.batches or (GRID_BATCHES if cfg.grid else (DEFAULT[1],))
+    return [(lr, b) for lr in lrs for b in batches]
 
 
 def model_dir(evaluation: str, model: str, name: str) -> Path:
@@ -148,7 +158,7 @@ def train(cfg: Config, log=print) -> Path:
         f"{len(val_items)} val files")
 
     runs = []
-    for lr, batch in (GRID if cfg.grid else [DEFAULT]):
+    for lr, batch in points(cfg):
         log(f" lr {lr:g} batch {batch}")
         model = _new_model(cfg)
         r = fit(model, train_ds, val_ds, lr, batch, cfg.epochs, cfg.patience, cfg.max_seconds,
