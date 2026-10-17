@@ -11,6 +11,7 @@ summary; scripts/report.py makes the full tables.
 import argparse
 import sys
 import time
+from collections import defaultdict
 
 import flowkit as fk
 import numpy as np
@@ -40,15 +41,22 @@ def main() -> int:
     by_key = {splits.key(s): s for s in registry["samples"]}
     role_of = {k: role for role, keys in stages.items() for k in keys}
     samples = [by_key[k] for k in sorted(role_of)]
-    ref = reference_sample(samples[0], samples[0]["usable_gates"][0], stages["train"], by_key)
-    ref_cache = cache.load_sample(ref)
-    gs = fk.Workspace(str(workspace_path(ref)), load_missing_file_data=True).get_gating_strategy(
-        ref["sample"])
-    templates = {gk: gs.get_gate(*name_and_path(gk)) for gk in ref_cache.gate_keys}
-    xforms = gs.transformations
-    print(f"template: {splits.key(ref)}; {len(samples)} samples")
+    print(f"{len(samples)} samples")
 
-    loaded = {splits.key(s): cache.load_sample(s) for s in samples}
+    # Each gate's template comes from its reference sample (ALS: donor 2008 for every gate;
+    # elsewhere the first training sample of the workspace that has the gate).
+    refs: dict[str, tuple] = {}
+
+    def template(s: dict, gk: str):
+        ref = reference_sample(s, gk, stages["train"], by_key)
+        if ref is None:
+            return None
+        rk = splits.key(ref)
+        if rk not in refs:
+            gs = fk.Workspace(str(workspace_path(ref)), load_missing_file_data=True)
+            refs[rk] = (gs.get_gating_strategy(ref["sample"]), cache.load_sample(ref))
+        gs, rc = refs[rk]
+        return gs.get_gate(*name_and_path(gk)), gs.transformations, rc
 
     def unstim_of(s: dict) -> dict | None:
         return next((u for u in samples if u["individual"] == s["individual"]
@@ -56,32 +64,37 @@ def main() -> int:
 
     # Cytokine background rate: median expert positive fraction in the training donors'
     # unstimulated wells.
-    background = {}
-    for gk in ref_cache.gate_keys:
-        if not is_cytokine(ref, gk):
-            continue
-        fr = [c.labels[c.gate(gk)][c.in_parent(c.gate(gk))].mean() for k, c in loaded.items()
-              if role_of[k] in args.fit_roles and by_key[k]["condition"] == "unstimulated"]
-        background[gk] = float(np.median(fr))
+    background = defaultdict(list)
+    for s in samples:
+        if role_of[splits.key(s)] in args.fit_roles and s["condition"] == "unstimulated":
+            c = cache.load_sample(s)
+            for gk in c.gate_keys:
+                if is_cytokine(s, gk):
+                    background[gk].append(c.labels[c.gate(gk)][c.in_parent(c.gate(gk))].mean())
+    background = {gk: float(np.median(v)) for gk, v in background.items()}
 
     shifts = {}
     rows = []
-    for s in samples:
+    for s in samples:            # one sample in memory at a time
         k = splits.key(s)
-        c = loaded[k]
-        for gk in c.gate_keys:
+        c = cache.load_sample(s)
+        for gk in s["usable_gates"]:
+            found = template(s, gk)
+            if found is None or not cache.gate_path(s, gk).exists():
+                continue                    # no training sample has this gate: not scored
+            gate, xforms, ref_cache = found
             g = c.gate(gk)
-            cells = np.flatnonzero(c.in_parent(g))
             truth, meta = cache.load_gate(s, gk)
-            assert np.array_equal(truth["cell_index"], cells), (k, gk)
+            # Predict exactly the model file's cells (all parent cells, or its 200k subsample).
+            cells = truth["cell_index"].astype(np.int64)
+            assert c.in_parent(g)[cells].all(), (k, gk)
             raw = c.gate_raw(g, cells)
             chans, pnrs = c.gate_channels(g)
-            gate = templates[gk]
             preds = {"template_copy": baseline.apply_template(gate, xforms, raw, chans, pnrs)}
             if gk in background and (u := unstim_of(s)) is not None:
                 key = (s["individual"], gk)
                 if key not in shifts:
-                    uc = loaded[splits.key(u)]
+                    uc = cache.load_sample(u)
                     ug = uc.gate(gk)
                     shifts[key] = (baseline.threshold_shift(
                         gate, xforms, uc.gate_raw(ug, uc.in_parent(ug)), chans, pnrs,
