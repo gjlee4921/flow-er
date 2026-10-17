@@ -265,16 +265,17 @@ def roles_by_sample(split: dict) -> dict[str, dict[str, str]]:
     return roles
 
 
-def reference_sample(sample: dict, gate_key: str, split: dict, by_key: dict) -> dict | None:
+def reference_sample(sample: dict, gate_key: str, train_keys: list[str],
+                     by_key: dict) -> dict | None:
     """The template's source for one gate: ALS = donor 2008's unstimulated well; otherwise the
-    first training sample (sorted by key) of the same dataset and workspace that has the gate
-    (workspaces differ in their trees). None when no training sample has the gate."""
+    first sample (sorted by key) of this evaluation's own training stage, same dataset and
+    workspace, that has the gate (workspaces differ in their trees). Only the evaluation's own
+    training individuals: another evaluation's training mice can be this one's test mice.
+    None when no training sample has the gate."""
     if sample["dataset"] in ALS_DATASETS:
         return next(s for s in by_key.values() if s["individual"] == ALS_REFERENCE_DONOR
                     and s["condition"] == "unstimulated" and s["dataset"] == "als_ics_screen3")
-    train = sorted({k for _, st in splits._evaluations(split) for k in st.get("train", [])}
-                   | set(split["pretrain"]["stages"]["train"]))
-    return next((by_key[k] for k in train if by_key[k]["dataset"] == sample["dataset"]
+    return next((by_key[k] for k in sorted(train_keys) if by_key[k]["dataset"] == sample["dataset"]
                  and by_key[k]["workspace"] == sample["workspace"]
                  and gate_key in by_key[k]["usable_gates"]), None)
 
@@ -369,7 +370,7 @@ def main() -> int:
     keys = sorted({k for st, ks in stages.items() if not args.stages or st in args.stages
                    for k in ks})
     # Templates and unstimulated wells are model inputs too: cache their sources as well.
-    refs = {(k, g): reference_sample(by_key[k], g, split, by_key)
+    refs = {(k, g): reference_sample(by_key[k], g, stages["train"], by_key)
             for k in keys for g in by_key[k]["usable_gates"]}
     unstims = {}
     for k in keys:

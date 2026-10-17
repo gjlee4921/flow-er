@@ -68,9 +68,10 @@ A model's per-cell prediction is `pred[i] = predicted_mask[cell_bins[i, 1], cell
   parent, for the FlowKit-vs-FlowJo noise floor: `|flowjo/flowjo_parent - flowkit/flowkit_parent|`
   in percentage points.
 - Reference sample (template), chosen per gate: ALS = donor 2008's unstimulated well (first
-  training donor); any other dataset = the first training sample (sorted by key; evaluation
-  `train` stages and the pool's `train`) of the same dataset **and workspace** that has the gate,
-  since workspaces have different trees. No such sample → `template` is all zeros and
+  training donor); any other dataset = the first sample (sorted by key) of the **cache build's own
+  evaluation's** `train` stage (the pool's `train` for `pretrain`) of the same dataset **and
+  workspace** that has the gate, since workspaces have different trees and another evaluation's
+  training mice can be this one's test mice. No such sample → `template` is all zeros and
   `template_source` is null (e.g. MO280 gates that exist only in the test tissues).
 - The pool (`--evaluation pretrain`) only gets model files for gates whose FlowKit counts agree
   with FlowJo (registry `agrees_with_flowjo`), never Time gates.

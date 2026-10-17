@@ -40,7 +40,7 @@ def main() -> int:
     by_key = {splits.key(s): s for s in registry["samples"]}
     role_of = {k: role for role, keys in stages.items() for k in keys}
     samples = [by_key[k] for k in sorted(role_of)]
-    ref = reference_sample(samples[0], samples[0]["usable_gates"][0], split, by_key)
+    ref = reference_sample(samples[0], samples[0]["usable_gates"][0], stages["train"], by_key)
     ref_cache = cache.load_sample(ref)
     gs = fk.Workspace(str(workspace_path(ref)), load_missing_file_data=True).get_gating_strategy(
         ref["sample"])
