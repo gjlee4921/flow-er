@@ -26,6 +26,7 @@ from flow_er.ml.unet.model import build
 GRID = [(lr, b) for lr in (1e-3, 3e-4) for b in (4, 8)]
 DEFAULT = (1e-3, 8)
 SPLIT_VERSION = "split_v1"
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 @dataclass
@@ -67,9 +68,10 @@ def dice_per_image(logits: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
 @torch.no_grad()
 def evaluate(model: nn.Module, data: ds.GateDataset, batch: int = 16) -> float:
     model.eval()
+    dev = next(model.parameters()).device
     scores = []
     for x, y in DataLoader(data, batch_size=batch):
-        scores.append(dice_per_image(model(x), y))
+        scores.append(dice_per_image(model(x.to(dev)), y.to(dev)))
     return float(torch.cat(scores).mean()) if scores else float("nan")
 
 
@@ -93,12 +95,14 @@ def fit(model: nn.Module, train: ds.GateDataset, val: ds.GateDataset, lr: float,
     opt = torch.optim.Adam(model.parameters(), lr=lr)
     loss_fn = nn.BCEWithLogitsLoss()
     loader = _loader(train, batch, balance, seed)
+    dev = next(model.parameters()).device
     best, best_epoch, best_state, history, stale = -1.0, -1, None, [], 0
     start = time.monotonic()
     for epoch in range(epochs):
         model.train()
         losses = []
         for x, y in loader:
+            x, y = x.to(dev), y.to(dev)
             opt.zero_grad()
             loss = loss_fn(model(x), y)
             loss.backward()
@@ -126,7 +130,7 @@ def _new_model(cfg: Config) -> nn.Module:
         if tuple(recipe["channels"]) != tuple(cfg.channels):
             raise ValueError(f"{init}: channels {recipe['channels']} != {list(cfg.channels)}")
         model.load_state_dict(torch.load(init / "model.pt", map_location="cpu"))
-    return model
+    return model.to(DEVICE)
 
 
 def train(cfg: Config, log=print) -> Path:
@@ -172,7 +176,7 @@ def train(cfg: Config, log=print) -> Path:
         "init": str(cfg.init) if cfg.init else None,
         "hyperparameters": {"lr": best["lr"], "batch": best["batch"], "max_epochs": cfg.epochs,
                             "patience": cfg.patience, "max_seconds": cfg.max_seconds,
-                            "grid": cfg.grid, "seed": cfg.seed, "threads": cfg.threads,
+                            "grid": cfg.grid, "seed": cfg.seed, "threads": cfg.threads, "device": str(DEVICE),
                             "balance_datasets": cfg.balance_datasets, "loss": "BCEWithLogitsLoss",
                             "optimiser": "Adam"},
         "grid": [{k: r[k] for k in ("lr", "batch", "best_val_dice", "best_epoch", "seconds")}
