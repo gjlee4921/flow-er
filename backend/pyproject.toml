@@ -1,0 +1,33 @@
+[project]
+name = "flow-er"
+version = "0.1.0"
+description = "Flow cytometry gating that learns each lab's gates from its own data"
+readme = "../README.md"
+license = "MIT"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic-settings>=2.4",
+    "sqlmodel>=0.0.22",
+    "flowkit>=1.2",
+    "numpy>=1.26",
+    "scikit-image>=0.24",
+    "torch>=2.4",
+    "segmentation-models-pytorch>=0.3.4",
+    "anthropic>=0.40",
+    "mcp>=1.2",
+]
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/flow_er"]
+
+[tool.ruff]
+line-length = 100

@@ -218,3 +218,20 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# --- flow-er ---
+# Node / frontend
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+# Local data, models and databases (large or private; never commit)
+data/
+models/
+*.fcs
+*.wsp
+*.acs
+*.db
+*.pt
+*.pth
+# The Python template ignores lib/; the frontend keeps shared code there
+!frontend/src/lib/
