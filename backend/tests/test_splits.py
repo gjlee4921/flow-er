@@ -92,7 +92,7 @@ def test_unknown_identity_in_test_fails(split, registry):
     group = set(keys_where(registry, individual="?mouse:macrophages_peritoneal:SM_PM_7:A"))
     pool = split["pretrain"]["stages"]["train"]
     split["pretrain"]["stages"]["train"] = [k for k in pool if k not in group]
-    split["evaluations"]["mo280_round1"]["stages"]["test"].append(sorted(group & set(pool))[0])
+    split["evaluations"]["mo280_round1"]["stages"]["test"].append(min(group & set(pool)))
     with pytest.raises(splits.SplitError, match="unknown identity"):
         splits.validate(split, registry)
 
