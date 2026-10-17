@@ -30,6 +30,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from inspect_wsp import read_fcs_text
 
 from flow_er.config import settings
 from flow_er.ml import images, splits
@@ -46,7 +47,9 @@ from flow_er.ml.cache import (
 
 ALS_DATASETS = ("als_ics_screen3", "als_ics_screen4")
 ALS_REFERENCE_DONOR = "human:2008"      # first ALS training donor: the template for every gate
-MAX_CELLS = 200_000
+MAX_CELLS = 200_000       # parent cells kept per model file
+MAX_EVENTS = 500_000      # larger files keep a fixed random subsample of events (seed 0)
+CHUNK = 50_000            # events gated at a time (FlowKit holds a few KB per event)
 
 
 def workspace_path(sample: dict) -> Path:
@@ -86,51 +89,104 @@ def describe(obj) -> dict:
 # --- per-sample source layer ------------------------------------------------------------------
 
 
+def read_events(path: Path, header: dict, rows: np.ndarray) -> np.ndarray:
+    """These event rows of a float FCS file, read through a memory map (no full load)."""
+    dtype = {"F": "f4", "D": "f8"}[header["$DATATYPE"]]
+    order = "<" if header["$BYTEORD"].startswith("1") else ">"
+    begin = int(header.get("$BEGINDATA", 0) or 0)
+    if not begin:
+        with open(path, "rb") as f:
+            begin = int(f.read(34)[26:34])
+    n_par = int(header["$PAR"])
+    data = np.memmap(path, dtype=order + dtype, mode="r", offset=begin,
+                     shape=(int(header["$TOT"]), n_par))
+    return preprocess(np.asarray(data[rows], dtype=np.float64), header)
+
+
+def preprocess(events: np.ndarray, header: dict) -> np.ndarray:
+    """FlowKit's (flowio's) event preprocessing, so values match a FlowKit file load exactly:
+    the Time channel times $TIMESTEP, log-scale channels expanded, then every channel divided by
+    its gain when the gain is not 1 (or 0)."""
+    names = [header[f"$P{i}N"] for i in range(1, events.shape[1] + 1)]
+    time = next((i for i, n in enumerate(names) if n.lower() == "time"), None)
+    if time is not None and header.get("$TIMESTEP", "").strip():
+        events[:, time] *= float(header["$TIMESTEP"])
+    for i in range(events.shape[1]):
+        decades, log0 = (float(v) for v in header.get(f"$P{i + 1}E", "0,0").split(","))
+        if decades > 0:
+            events[:, i] = 10 ** (decades * events[:, i] / float(header[f"$P{i + 1}R"])) * log0
+        gain = float(header.get(f"$P{i + 1}G", "1") or 1)
+        if gain not in (1.0, 0.0):
+            events[:, i] /= gain
+    return events
+
+
 def build_sample(sample: dict) -> dict:
-    """Gate one sample with FlowKit and return the arrays of its source file."""
+    """Gate one sample with FlowKit and return the arrays of its source file.
+
+    Events are read straight from the file and gated CHUNK at a time with the workspace's
+    gating strategy, which gives the same per-event labels as gating the whole file (gates are
+    per event; values get FlowKit's own preprocessing) at a fraction of its memory. Files with more
+    than MAX_EVENTS events keep a fixed random subsample of events (seed 0).
+    """
     sid, fcs = sample["sample"], settings.data_dir / sample["file"]
-    fk_sample = fk.Sample(str(fcs), sample_id=sid, use_flowjo_labels=True)
-    pnr = {ch: float(r) for ch, r in zip(fk_sample.pnn_labels, [
-        fk_sample.channels.loc[i, "pnr"] for i in fk_sample.channels.index])}
-    wsp = fk.Workspace(str(workspace_path(sample)), fcs_samples=[fk_sample],
-                       load_missing_file_data=True)
-    wsp.analyze_samples(sample_id=sid, cache_events=False, use_mp=False)
+    header = read_fcs_text(fcs)
+    if header["$DATATYPE"] not in ("F", "D"):
+        raise NotImplementedError(f"{fcs}: $DATATYPE {header['$DATATYPE']}")
+    n_par, total = int(header["$PAR"]), int(header["$TOT"])
+    pnn = [header[f"$P{i}N"].replace("/", "_") for i in range(1, n_par + 1)]   # FlowJo labels
+    pnr = {ch: float(header[f"$P{i}R"]) for i, ch in enumerate(pnn, start=1)}
+    rows = (np.arange(total) if total <= MAX_EVENTS else
+            np.sort(np.random.default_rng(0).choice(total, MAX_EVENTS, replace=False)))
+
+    wsp = fk.Workspace(str(workspace_path(sample)), load_missing_file_data=True)
     gs = wsp.get_gating_strategy(sid)
     comp = wsp.get_comp_matrix(sid)
-    raw_events = fk_sample.get_events(source="raw")
-    comp_events = comp.apply(fk_sample) if comp is not None else raw_events
-    labels_pnn = fk_sample.pnn_labels
+    # Usable gates plus any ancestor they need for their parent cells (e.g. a Time QC gate at
+    # the root of the tree); model files are only written for the usable ones.
+    usable = list(sample["usable_gates"])
+    ancestors = {"/".join(k.split("/")[:i]) for k in usable for i in range(1, k.count("/") + 1)}
+    gate_keys = sorted(ancestors - set(usable), key=lambda k: k.count("/")) + usable
+    gates = {key: gs.get_gate(*name_and_path(key)) for key in gate_keys}
 
-    gate_keys = list(sample["usable_gates"])
-    columns, values = [], []          # gated channels; "|raw" marks an uncompensated dimension
-
-    def column(dim) -> int:
-        compensated = dim.compensation_ref not in (None, "uncompensated")
-        name = dim.id if compensated else f"{dim.id}|raw"
-        if name not in columns:
-            idx = labels_pnn.index(dim.id)
-            columns.append(name)
-            values.append((comp_events if compensated else raw_events)[:, idx])
-        return columns.index(name)
-
-    n = raw_events.shape[0]
+    columns = []                      # gated channels; "|raw" marks an uncompensated dimension
+    for gate in gates.values():
+        for d in gate.dimensions[:2]:
+            compensated = d.compensation_ref not in (None, "uncompensated")
+            name = d.id if compensated else f"{d.id}|raw"
+            if name not in columns:
+                columns.append(name)
+    n = len(rows)
     labels = np.zeros((len(gate_keys), n), bool)
+    raw = np.zeros((n, len(columns)), np.float32)
+    for start in range(0, n, CHUNK):
+        part = rows[start:start + CHUNK]
+        chunk = fk.Sample(read_events(fcs, header, part), sample_id=sid, channel_labels=pnn)
+        result = gs.gate_sample(chunk)
+        raw_events = chunk.get_events(source="raw")
+        comp_events = comp.apply(chunk) if comp is not None else raw_events
+        for g, key in enumerate(gate_keys):
+            name, path = name_and_path(key)
+            labels[g, start:start + len(part)] = result.get_gate_membership(name, path)
+        for c, name in enumerate(columns):
+            ch, compensated = name.split("|")[0], not name.endswith("|raw")
+            raw[start:start + len(part), c] = (comp_events if compensated else
+                                              raw_events)[:, pnn.index(ch)]
+
     parent = np.full(len(gate_keys), -1, np.int16)
     dims = np.zeros((len(gate_keys), 2), np.int16)
     gates_meta, xform_meta = [], {}
     for g, key in enumerate(gate_keys):
-        name, path = name_and_path(key)
-        gate = gs.get_gate(name, path)
-        labels[g] = wsp.get_gate_membership(sid, name, path)
-        parent_key = "/".join(path[1:])
+        gate = gates[key]
+        parent_key = "/".join(name_and_path(key)[1][1:])
         parent[g] = gate_keys.index(parent_key) if parent_key else -1
-        dims[g] = [column(d) for d in gate.dimensions[:2]]
+        dims[g] = [columns.index(d.id if d.compensation_ref not in (None, "uncompensated")
+                                 else f"{d.id}|raw") for d in gate.dimensions[:2]]
         for d in gate.dimensions[:2]:
             if d.transformation_ref and d.transformation_ref not in xform_meta:
                 xform_meta[d.transformation_ref] = describe(gs.transformations[d.transformation_ref])
         gates_meta.append({"key": key, **describe(gate)})
 
-    raw = np.column_stack(values).astype(np.float32)
     chan = [c.split("|")[0] for c in columns]
     pnrs = [pnr[c] for c in chan]
     disp = images.to_display(raw, chan, pnrs)
@@ -145,10 +201,12 @@ def build_sample(sample: dict) -> dict:
                                     [pnrs[x], pnrs[y]])
     return {"raw": raw, "columns": np.array(columns), "pnr": np.array(pnrs, np.float64),
             "labels": labels, "parent": parent, "dims": dims, "images": imgs, "masks": masks,
-            "gate_keys": np.array(gate_keys),
+            "gate_keys": np.array(gate_keys), "event_index": rows.astype(np.uint32),
             "meta": json.dumps({"sample": splits.key(sample), "registry": sample,
                                 "recipe": images.RECIPE, "gates": gates_meta,
-                                "transforms": xform_meta})}
+                                "transforms": xform_meta,
+                                "events": {"n_total": total, "n_kept": n,
+                                           "subsampled": bool(n < total), "seed": 0}})}
 
 
 def mask_agreement(arrays: dict) -> list[float]:
@@ -246,7 +304,7 @@ def write_model_files(sample: dict, src: Cached, templates: dict[str, tuple[np.n
     n_events = src.labels.shape[1]
     written = 0
     for g, gk in enumerate(src.gate_keys):
-        if keep is not None and gk not in keep:
+        if gk not in sample["usable_gates"] or (keep is not None and gk not in keep):
             continue
         template, template_key = templates.get(gk, (np.zeros_like(src.masks[g]), None))
         cells = np.flatnonzero(src.in_parent(g))
@@ -264,7 +322,8 @@ def write_model_files(sample: dict, src: Cached, templates: dict[str, tuple[np.n
         chans, pnrs = src.gate_channels(g)
         fk_count, fj_count = counts.get(gk, (np.nan, np.nan))
         fk_parent, fj_parent = (counts.get(parent_key, (np.nan, np.nan)) if parent_key
-                                else (n_events, sample["events"]))
+                                else (src.meta.get("events", {}).get("n_total", n_events),
+                                      sample["events"]))
         meta = {
             "format": FORMAT, "recipe_id": images.recipe_id(),
             "dataset": sample["dataset"], "sample": splits.key(sample),
@@ -280,6 +339,8 @@ def write_model_files(sample: dict, src: Cached, templates: dict[str, tuple[np.n
             "unstim_source": unstim_key if cyto else None,
             "cells": {"n_parent": int(n_parent), "n_kept": len(cells),
                       "subsampled": bool(n_parent > MAX_CELLS), "seed": 0},
+            "events": src.meta.get("events", {"n_total": n_events, "n_kept": n_events,
+                                              "subsampled": False, "seed": 0}),
             "counts": {"flowkit": float(fk_count), "flowkit_parent": float(fk_parent),
                        "flowjo": float(fj_count), "flowjo_parent": float(fj_parent)},
         }

@@ -32,6 +32,11 @@ data/_results/<evaluation>/<method>/<dataset>/<gate_id>/<sample_id>.npz   predic
 | `cell_label` | bool [N] | FlowKit membership of each parent cell (the truth) |
 | `cell_index` | uint32 [N] | the cell's event index in the FCS file |
 
+Events: files with more than 500,000 events keep a fixed random subsample of 500,000 events
+(seed 0) before anything else (`meta.events`; the source layer's `event_index` maps rows to the
+file's event numbers, and `cell_index` indexes those kept rows). Gating is per event, so the kept
+events' labels are exactly those of the whole file. ALS files are all below that size.
+
 Pixels: display value `v` (about 0..1 in the shared transform) → pixel `round(100 v)`, clipped to
 0..100. Row = y channel, column = x channel. Parent cells are all cells in the **expert** parent
 gate. If a parent has more than 200,000 cells, a fixed random subsample of 200,000 is kept
