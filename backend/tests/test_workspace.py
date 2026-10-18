@@ -499,3 +499,43 @@ def test_a_figure_step_with_a_chart_draws_its_figure_as_a_draft_when_the_run_rea
     store.keep(exp)
     node = executor.start(exp, wait=True)["nodes"]["fig"]
     assert node["status"] == "failed" and "no_such_column" in node["summary"]
+
+
+def test_a_file_renamed_after_flowjo_still_finds_its_workspace_name():
+    """FlowJo kept "Specimen_001_C2_C02 Peptide.fcs"; the file was saved later with its group in front."""
+    from flow_er.workspace.data import _named
+    names = {"Specimen_001_C2_C02 Peptide.fcs", "Specimen_001_C12_C12 Negative.fcs"}
+    f = Path("ALS Specimen_001_C2_C02 Peptide.fcs")
+    assert _named(f, "Specimen_001_C2_C02.fcs", names) == "Specimen_001_C2_C02 Peptide.fcs"
+    assert _named(Path("Specimen_001_C12_C12 Negative.fcs"), "x.fcs", names) == "Specimen_001_C12_C12 Negative.fcs"
+    assert _named(Path("ALSSpecimen_001_C2_C02 Peptide.fcs"), "y.fcs", names) is None  # no word break, no match
+    assert _named(Path("a.fcs"), "Specimen_001_C2_C02 Peptide.fcs", names) == "Specimen_001_C2_C02 Peptide.fcs"  # $FIL first
+
+
+def test_a_figure_filter_by_gate_path_matches_a_table_that_names_only_the_gate():
+    from flow_er.workspace.views import _same
+    assert _same("CD4 Single Positive", "Lymphocytes/Single Cells/CD3/CD4 Single Positive")
+    assert not _same("CD8 Single Positive", "Lymphocytes/Single Cells/CD3/CD4 Single Positive")
+    assert not _same("Lymphocytes/CD3", "Lymphocytes/Single Cells/CD3")  # a path in the table must match whole
+
+
+def test_a_script_input_named_by_its_step_or_op_reads_that_steps_table():
+    from flow_er.llm.tools import _input_name
+    steps = [{"id": "count_gates", "op": "population_stats", "outputs": ["gate_counts"]}]
+    assert _input_name("gate_counts", steps) == "gate_counts"
+    assert _input_name("count_gates", steps) == "gate_counts"
+    assert _input_name("population_stats", steps) == "gate_counts"
+    assert _input_name("fcs", steps) == "fcs"
+    with pytest.raises(ValueError, match="gate_counts \\(from count_gates\\)"):
+        _input_name("macs_table", steps)
+
+
+def test_every_tool_takes_the_arguments_it_offers_the_model():
+    """A tool's handler must accept each parameter its schema advertises (a decorator on the wrong def breaks this)."""
+    import inspect
+    for name, t in tools.REGISTRY.items():
+        sig = inspect.signature(t.handler).parameters
+        if any(v.kind is inspect.Parameter.VAR_KEYWORD for v in sig.values()):
+            continue  # takes any keyword
+        accepted = set(sig) - {"ctx"}
+        assert set(t.params) <= accepted, f"{name}: {set(t.params) - accepted} not accepted by {t.handler.__name__}"

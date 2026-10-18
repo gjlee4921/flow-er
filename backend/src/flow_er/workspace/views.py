@@ -69,11 +69,12 @@ def validate(exp_id: str, spec: dict) -> dict:
 
 def _same(cell, want) -> bool:
     """A filter value against a table cell. Saved tables come back as text, so true and "True",
-    1 and "1.0" are the same value."""
+    1 and "1.0" are the same value; a gate's path ("…/CD3/CD4 Single Positive") is that gate where
+    the table names only the gate ("CD4 Single Positive")."""
     if cell == want:
         return True
     a, b = str(cell).strip().lower(), str(want).strip().lower()
-    if a == b:
+    if a == b or (a and "/" not in a and "/" in b and b.rsplit("/", 1)[1] == a):
         return True
     try:
         return float(a) == float(b)

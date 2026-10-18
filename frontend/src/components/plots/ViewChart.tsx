@@ -47,7 +47,15 @@ export default function ViewChart({ view }: { view: View }) {
     return [...new Set(rows.map((r) => String(r[spec.color!])))];
   }, [rows, spec.color]);
   const colour = (g: string) => SERIES[groups.indexOf(g) % SERIES.length];
-  const xs = useMemo(() => [...new Set(rows.map((r) => String(r[spec.x ?? ""])))], [rows, spec.x]);
+  // categories that are one word and a number ("mouse 2" … "mouse 16") go in number order and are
+  // labelled by the number alone, the word becoming the axis title; any others keep the table's order
+  const { xs, series } = useMemo(() => {
+    const all = [...new Set(rows.map((r) => String(r[spec.x ?? ""])))];
+    const parts = all.map((x) => /^(.*?)[\s_-]*(\d+)$/.exec(x));
+    const word = parts[0]?.[1];
+    if (all.length < 4 || !word || parts.some((p) => !p || p[1] !== word)) return { xs: all, series: null };
+    return { xs: [...all].sort((a, b) => Number(/\d+$/.exec(a)![0]) - Number(/\d+$/.exec(b)![0])), series: word };
+  }, [rows, spec.x]);
 
   if (!rows.length) return <p className="note">The table has no rows for this view yet.</p>;
   if (spec.type === "table") return <TableView view={view} />;
@@ -77,6 +85,9 @@ export default function ViewChart({ view }: { view: View }) {
   let marks: JSX.Element[] = [];
   const band = pw / Math.max(1, xs.length);
   const xc = (x: string) => L + band * (xs.indexOf(x) + 0.5);
+  // labels that would run into each other lean over (about 6.5 px a character at the tick size)
+  const longest = Math.max(0, ...xs.map((x) => (series != null ? x.length - series.length : label(x).length)));
+  const tilt = longest * 6.5 > band - 6;
   const visibleGroups = groups.filter((g) => !hidden.has(g));
 
   if (spec.type === "bar") {
@@ -155,12 +166,16 @@ export default function ViewChart({ view }: { view: View }) {
         {yt.map((t) => <g key={t}><line className="grid" x1={L} x2={W - R} y1={Y(t)} y2={Y(t)} /><text className="tick" x={L - 8} y={Y(t) + 4} textAnchor="end">{tickLabel(t)}</text></g>)}
         {ymin < 0 && spec.type !== "heatmap" && <line className="zero" x1={L} x2={W - R} y1={Y(0)} y2={Y(0)} />}
         {marks}
-        {spec.type !== "scatter" && xs.map((x) => (
-          <text key={x} className="tick" x={spec.type === "heatmap" ? L + (pw / xs.length) * (xs.indexOf(x) + 0.5) : xc(x)} y={H - B + 18}
-            textAnchor="middle" style={{ cursor: "pointer", fontWeight: hot === selKey(label(x)) ? 600 : 400 }} onClick={() => setSelection(label(x))}>{label(x)}</text>
-        ))}
+        {spec.type !== "scatter" && xs.map((x) => {
+          const cx = spec.type === "heatmap" ? L + (pw / xs.length) * (xs.indexOf(x) + 0.5) : xc(x);
+          const text = series != null ? x.slice(series.length).replace(/^[\s_-]+/, "") : label(x);
+          return (
+            <text key={x} className="tick" x={cx} y={H - B + 18} textAnchor={tilt ? "end" : "middle"} transform={tilt ? `rotate(-35 ${cx} ${H - B + 18})` : undefined}
+              style={{ cursor: "pointer", fontWeight: hot === selKey(label(x)) ? 600 : 400 }} onClick={() => setSelection(label(x))}>{text}</text>
+          );
+        })}
         {spec.type === "heatmap" && visibleGroups.map((g, i) => <text key={g} className="tick" x={L - 8} y={T + (ph / visibleGroups.length) * (i + 0.5) + 4} textAnchor="end">{label(g)}</text>)}
-        <text className="axis-t" x={L + pw / 2} y={H - 8} textAnchor="middle">{spec.x_label || spec.x}</text>
+        <text className="axis-t" x={L + pw / 2} y={H - 8} textAnchor="middle">{spec.x_label || (series ? series.trim() : spec.x)}</text>
         {spec.type !== "heatmap" && (
           <text className="axis-t" x={14} y={T + ph / 2} textAnchor="middle" transform={`rotate(-90 14 ${T + ph / 2})`}>
             {ytitle.map((t, i) => <tspan key={i} x={14} dy={i ? 14 : 0}>{t}</tspan>)}

@@ -148,11 +148,23 @@ def _words(text: str) -> set[str]:
     return {w for w in re.split(r"[^a-z0-9]+", text.lower()) if w}
 
 
+def _named(f: Path, fil: str, names) -> str | None:
+    """The name a workspace knows this file by: its name at acquisition ($FIL), its file name, or the
+    file name less words added in front of it later (FlowJo kept "Specimen_001_C2_C02 Peptide.fcs",
+    the file was then saved as "ALS Specimen_001_C2_C02 Peptide.fcs")."""
+    if fil in names:
+        return fil
+    if f.name in names:
+        return f.name
+    return next((n for n in names if len(f.name) > len(n) and f.name.endswith(n) and f.name[-len(n) - 1] in " _-"), None)
+
+
 def _assign(fcs: list[Path], wsps: list[Path]) -> dict[Path, list[tuple[Path, str]]]:
     """Which FCS files each FlowJo workspace gates, and by what name inside it. A workspace names its
     samples by the file name they had at acquisition ($FIL), so two groups (say ALS and healthy
     controls) can each have a "Specimen_001_C1_C01.fcs"; a file then goes to the workspace whose own
-    name and folders share the most words with the file's name (ALS with ALS, HC with HC)."""
+    name and folders share the most words with the file's name (ALS with ALS, HC with HC), counting
+    only the words those workspaces don't all share (both may sit under an "ALS study" folder)."""
     from urllib.parse import unquote
 
     from flowkit._utils import wsp_utils  # the sample names and file paths a .wsp lists
@@ -169,13 +181,14 @@ def _assign(fcs: list[Path], wsps: list[Path]) -> dict[Path, list[tuple[Path, st
     for f in fcs:
         kw = (fcs_header(f) or {}).get("keywords", {})
         fil = kw.get("$FIL") or f.name
-        hits = [w for w, names in listed.items() if fil in names or f.name in names]
-        if not hits:
+        named = {w: n for w, names in listed.items() if (n := _named(f, fil, names))}
+        if not named:
             continue
         # the words the file gained after acquisition, and the plate it was run on
         own = (_words(f.stem) - _words(Path(fil).stem)) | _words(kw.get("PLATE NAME", ""))
-        best = max(hits, key=lambda w: len(own & listed[w].get(fil, listed[w].get(f.name, set()))))
-        out[best].append((f, fil if fil in listed[best] else f.name))
+        shared = set.intersection(*(listed[w][n] for w, n in named.items()))
+        best = max(named, key=lambda w: len(own & (listed[w][named[w]] - shared)))
+        out[best].append((f, named[best]))
     return out
 
 
@@ -196,7 +209,11 @@ class Dataset:
                 if not files:
                     continue
                 try:
-                    ws = fk.Workspace(str(w), fcs_samples=[str(f) for f, _ in files])
+                    # FlowKit knows a file by its $FIL; one FlowJo renamed is loaded under FlowJo's name,
+                    # with FlowJo's channel names ("/" as "_") as FlowKit does for the others
+                    ws = fk.Workspace(str(w), fcs_samples=[
+                        str(f) if name == ((fcs_header(f) or {}).get("keywords", {}).get("$FIL") or f.name)
+                        else fk.Sample(str(f), sample_id=name, use_flowjo_labels=True) for f, name in files])
                 except Exception:
                     log.warning("could not read %s; its files are used without gates", w, exc_info=True)
                     continue

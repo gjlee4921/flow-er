@@ -3,9 +3,11 @@ individual's unstimulated well. The gate models need it: cytokine gates read the
 lab's models are retrained, held-out samples must come from individuals not trained on.
 
 Read from file names until the scientist keeps it. Plates are usually laid out as runs of wells,
-one individual after another, each run starting with the unstimulated well ("HC Specimen_001_C4_C04
-Negative", "... C5_C05 Peptide", "... C6_C06 Positive"); a group prefix (ALS, HC) keeps groups apart.
-Tissue studies name files by organ and tube ("Aorta_3.fcs", "Spleen_3.fcs"): the tube is the animal.
+one individual after another, each condition once ("HC Specimen_001_C4_C04 Negative", "... C5_C05
+Peptide", "... C6_C06 Positive", or Positive, Peptide, Negative): a condition seen already starts the
+next individual, whose unstimulated well may come first or last. A group prefix (ALS, HC) keeps groups apart.
+Tissue studies name files by organ and tube ("Aorta_3.fcs", "Spleen_3.fcs"): the tube is the animal;
+"Spleen samples_Old 1.fcs" adds the condition (old or young) in front of the animal's number.
 A samples.csv in the data folder (sample, then any of individual or mouse, organ or tissue, condition
 or diet) says what names cannot, such as the diet. Kept rows live in state/sample_meta.json and are
 changed like anything else: as a draft, then Keep.
@@ -24,6 +26,9 @@ WELL = re.compile(r"(?:^|[_\s-])([A-H])0*(\d{1,2})(?=[_\s.-]|$)", re.IGNORECASE)
 # "<organ>_<tube>": the organ, and the tube that is the animal
 ORGAN_TUBE = re.compile(r"^(aorta|blood|liver|spleen|lung|thymus|kidney|heart|brain|skin|bone[ _-]?marrow|bm|"
                         r"lymph[ _-]?node|ln|tumou?r|pbmc|peritoneum)[ _-]+(\d{1,3})$", re.IGNORECASE)
+# "<organ> ..._<condition> <n>": the organ, an age group, and the animal within that group
+ORGAN_AGE = re.compile(r"^(aorta|blood|liver|spleen|lung|thymus|kidney|heart|brain|skin|bone[ _-]?marrow|"
+                       r"lymph[ _-]?node|tumou?r|peritoneum)\b.*[ _-](young|old|aged)[ _-]*(\d{1,3})$", re.IGNORECASE)
 SHEET_COLS = {"individual": ("individual", "mouse", "animal", "donor", "subject"), "organ": ("organ", "tissue"),
               "condition": ("condition", "diet", "group", "treatment")}
 
@@ -46,18 +51,25 @@ def infer(sample_ids: list[str]) -> list[dict]:
     for sid, p in parts.items():
         if m := ORGAN_TUBE.match(p["stem"]):
             rows[sid].update(individual=f"mouse {int(m.group(2))}", organ=m.group(1).lower().replace("_", " "))
+        elif m := ORGAN_AGE.match(p["stem"]):
+            age = m.group(2).lower()
+            rows[sid].update(individual=f"{age} mouse {int(m.group(3))}", organ=m.group(1).lower().replace("_", " "), condition=age)
     with_cond = [s for s, p in parts.items() if p["condition"]]
     if with_cond:
-        # per group, wells in plate order; each unstimulated well starts the next individual
+        # per group, wells in plate order; a condition the current individual already has starts the next
         for group in sorted({parts[s]["group"] for s in with_cond}):
             members = sorted((s for s in with_cond if parts[s]["group"] == group), key=lambda s: (parts[s]["row"], parts[s]["col"], s))
-            n, current, unstim = 0, None, None
+            n, current, seen = 0, None, set()
             for s in members:
-                if parts[s]["unstim"] or current is None:
+                c = parts[s]["condition"].lower()
+                if current is None or c in seen:
                     n += 1
-                    current = f"{group}-{n}" if group else f"donor-{n}"
-                    unstim = s if parts[s]["unstim"] else None
-                rows[s]["individual"], rows[s]["unstim"] = current, unstim
+                    current, seen = (f"{group}-{n}" if group else f"donor-{n}"), set()
+                seen.add(c)
+                rows[s]["individual"] = current
+            # each individual's own unstimulated well, first or last among its wells
+            for s in members:
+                rows[s]["unstim"] = next((m for m in members if rows[m]["individual"] == rows[s]["individual"] and parts[m]["unstim"]), None)
     rest = [s for s in sample_ids if not rows[s]["individual"]]
     if rest:
         # no conditions in the names: files sharing a name prefix are taken as one individual

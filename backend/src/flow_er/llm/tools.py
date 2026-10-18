@@ -293,6 +293,19 @@ def _view(ctx: Ctx, **spec: Any) -> dict:
     return {"draft": d["id"], "view": v["id"], "rows_drawn": len(rows)}
 
 
+def _input_name(name: str, steps: list[dict]) -> str:
+    """The output a script input means: an output's own name, or a step named by its id or its op
+    ("count_gates", "population_stats") when that step makes one output. Anything else is refused with
+    the outputs there are, so the next try can pick one."""
+    if name in nodes.SOURCES or any(name in s.get("outputs", []) for s in steps):
+        return name
+    by = [s for s in steps if name in (s.get("id"), s.get("op")) and len(s.get("outputs", [])) == 1]
+    if len(by) == 1:
+        return by[0]["outputs"][0]
+    there = ", ".join(f"{o} (from {s['id']})" for s in steps for o in s.get("outputs", [])) or "none yet"
+    raise ValueError(f"'{name}' is not an output of any step; a script can read fcs or one of: {there}")
+
+
 @tool("write_macro",
       "Add a script step for something no built-in op covers (a QC rule, a ratio, a custom statistic). A subagent finds "
       "reference code on the allowed sites, adapts it (only MIT, BSD, Apache-2.0, ISC or PSF sources), and tests it in the "
@@ -306,7 +319,7 @@ def _macro(ctx: Ctx, goal: str, inputs: list[str] | None = None, after: str | No
     from flow_er.llm import script_writer
     d = store.draft(ctx.exp_id)
     steps = [dict(s) for s in (d["payload"] if d and d["kind"] == "plan" else store.state(ctx.exp_id, "plan"))]
-    inputs = inputs or ["fcs"]
+    inputs = [_input_name(n, steps) for n in (inputs or ["fcs"])]
     ports = {}
     for name in inputs:
         kind = nodes.port_type(name, steps)
