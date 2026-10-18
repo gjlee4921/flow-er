@@ -90,13 +90,19 @@ def _fingerprint(exp_id: str) -> dict:
     ds = lab.dataset(exp_id)
     files = [(p.name, p.stat().st_size, int(p.stat().st_mtime)) for p in ds.fcs]
     sha = lambda v: hashlib.sha1(json.dumps(v, default=str).encode()).hexdigest()
-    return {"files": sha(files), "gates": sha(store.state(exp_id, "gates"))}
+    try:  # the model version and who each file came from: what the model steps also depend on
+        from flow_er.workspace import models
+        model_print = sha([models.version(exp_id), store.state(exp_id, "sample_meta")])
+    except Exception:  # noqa: BLE001  without the models nothing reads this
+        model_print = "none"
+    return {"files": sha(files), "gates": sha(store.state(exp_id, "gates")), "models": model_print}
 
 
 def _key(step: dict, input_keys: list[str], data_print: dict, samples: list[str] | None) -> str:
     spec = {k: v for k, v in step.items() if k not in ("title", "why", "id", "x", "y")}
     kind = nodes.NODE_TYPES.get(step["op"], {})
-    data = {"files": data_print.get("files"), **({"gates": data_print.get("gates")} if kind.get("reads_gates") else {})}
+    data = {"files": data_print.get("files"), **({"gates": data_print.get("gates")} if kind.get("reads_gates") else {}),
+            **({"models": data_print.get("models")} if kind.get("reads_models") else {})}
     body = {"step": spec, "version": kind.get("version"), "inputs": input_keys, "data": data, "samples": samples}
     return hashlib.sha1(json.dumps(body, sort_keys=True, default=str).encode()).hexdigest()[:16]
 

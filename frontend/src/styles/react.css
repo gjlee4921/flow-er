@@ -415,3 +415,14 @@
 .dimg canvas { border: 1px solid var(--sep); border-radius: var(--r-tag); display: block; }
 .dimg figcaption { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-3); }
 .dimg-y::before { content: "y: "; } .dimg figcaption span:first-child::before { content: "x: "; }
+/* the autogate step's panel: per-gate table with the unsure ones flagged, actions, the lab's versions */
+.ag-panel { display: grid; gap: 10px; min-width: 0; margin-bottom: 8px; }
+.ag-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ag-tbl td:first-child { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ag-tbl tr.ag-unsure td { background: color-mix(in srgb, var(--c-flag) 7%, transparent); }
+.ag-flag { margin-left: 6px; font-size: 10.5px; font-weight: 600; padding: 1px 6px; border-radius: var(--r-tag); color: var(--c-flag); background: color-mix(in srgb, var(--c-flag) 10%, var(--raised)); }
+.ag-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.ag-models ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
+.ag-models li { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; color: var(--text-2); }
+.ag-models li small { color: var(--text-3); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ag-models li.on > span:first-child { font-weight: 600; color: var(--text); }

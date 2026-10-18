@@ -1,0 +1,59 @@
+"""The gating models in the app: reading the ALS screen (two FlowJo workspaces whose files repeat
+internal names), who each file came from, and gating one unseen file with lab "als" against the
+expert's FlowJo gates. Skipped when the ALS folder or the trained models are not on this machine
+(they stay out of git)."""
+
+import pytest
+
+from flow_er.config import settings
+from flow_er.workspace import samplemeta, store
+
+ALS = settings.data_dir.expanduser() / "als_ics_screen4"
+MODELS = settings.models_dir.expanduser() / "labs" / "als" / "template.json"
+needs_als = pytest.mark.skipif(not ALS.exists(), reason=f"no ALS screen at {ALS}")
+needs_models = pytest.mark.skipif(not MODELS.exists(), reason="no lab als models on this machine")
+
+
+@needs_als
+def test_every_workspace_is_read_and_files_are_known_by_name():
+    """24 files, each gated by its own group's workspace (ALS with ALS, HC with HC), though both
+    workspaces call their files "Specimen_001_C1_C01.fcs" and so on."""
+    from flow_er.workspace.data import Dataset
+    ds = Dataset(ALS)
+    assert len(ds.sample_ids) == 24
+    for sid in ds.sample_ids:
+        assert sid.split()[0] in ds.workspace_for(sid).name, sid
+    hc = "HC Specimen_001_C1_C01 Negative.fcs"
+    assert len(ds.flowjo_gates(hc)) == 16 and ds._sample(hc).event_count != ds._sample("ALS Specimen_001_C1_C01 Negative.fcs").event_count
+
+
+def test_who_each_file_came_from_is_read_from_its_name():
+    names = [f"{g} Specimen_001_C{n}_C{n:02d} {c}.fcs" for g in ("ALS", "HC") for n, c in
+             zip(range(1, 7), ["Negative", "Peptide", "Positive"] * 2)]
+    rows = {r["sample"]: r for r in samplemeta.infer(names)}
+    hc5 = rows["HC Specimen_001_C5_C05 Peptide.fcs"]
+    assert hc5["individual"] == "HC-2" and hc5["condition"] == "Peptide" and hc5["unstim"] == "HC Specimen_001_C4_C04 Negative.fcs"
+    assert rows["ALS Specimen_001_C1_C01 Negative.fcs"]["individual"] == "ALS-1"
+    plain = samplemeta.infer(["101_DEN084Y5_15_E01_008_clean.fcs", "101_DEN084Y5_15_E03_009_clean.fcs"])
+    assert {r["individual"] for r in plain} == {"101_DEN084Y5_15"}
+
+
+@needs_als
+@needs_models
+def test_lab_als_gates_an_unseen_file_like_the_expert(tmp_path, monkeypatch):
+    """HC donor 2's peptide well, with its unstimulated well: 16 gates, the upstream ones (lymphocytes
+    to CD4 and CD8) by the lab's U-Nets with F1 of at least 0.9 against the expert's FlowJo gates."""
+    from flow_er.workspace import models
+    monkeypatch.setattr(settings, "workspace_dir", tmp_path)
+    exp = store.create(ALS, "ALS")["id"]
+    assert models.lab_for(exp) == "als"
+    body = models.autogate(exp, "HC Specimen_001_C5_C05 Peptide.fcs")
+    assert len(body["gates"]) == 16 and body["unstim"] == "HC Specimen_001_C4_C04 Negative.fcs"
+    upstream = [g for g in body["gates"] if g["gate"].split("/")[-1] in
+                ("Lymphocytes", "Single Cells 1", "Single Cells 2", "Comp-LIVE_DEAD Aqua-A, SSC-A subset", "CD3",
+                 "CD4 Single Positive", "CD8 Single Positive")]
+    assert len(upstream) == 7
+    for g in upstream:
+        assert "/unito/" in g["model"] and g["f1"] >= 0.9, (g["gate"], g["model"], g.get("f1"))
+    review = models.review(exp, "HC Specimen_001_C5_C05 Peptide.fcs")
+    assert len(review["gates"]) == 15 and all(k.endswith("(model)") for k in review["gates"])

@@ -28,7 +28,16 @@ NODE_TYPES: dict[str, dict] = {
     "gate_from_workspace": {"name": "Apply the FlowJo gates", "kind": "model", "takes": ["events", "samples", "gates"], "makes": "labels", "version": "1",
                             "about": "Use the gates in the lab's FlowJo workspace as the labels."},
     "train_gate_model": {"name": "Train a gate model", "kind": "model", "takes": ["labels", "events", "samples", "gates"], "makes": "model", "version": "1",
-                         "about": "Train a per-gate model on the labelled samples (flow_er.ml)."},
+                         "about": "Retrain the lab's gate models on the gates the scientist kept (flow_er.ml); a new version is used only if it is better."},
+    "autogate": {"name": "Gate with the lab's models", "kind": "model", "takes": ["samples", "events", "labels", "gates"], "makes": "table",
+                 "version": "1", "reads_models": True,
+                 "about": "Gate every file with the lab's trained models (a per-gate U-Net, else the lab's template): per gate the count, "
+                          "% of parent, which model answered and how sure it was, and FlowJo's % and an F1 where FlowJo gates exist. "
+                          "The model gates are drafts the scientist reviews and keeps in the data lab.",
+                 "columns": {"sample": "the FCS file name", "gate": "the gate's full path", "model": "which model answered (or template_copy)",
+                             "confidence": "how sure the model was near the gate's edge, 0-1 (blank for template copies)",
+                             "low_confidence": "true when the gate should be reviewed", "count": "events in the gate",
+                             "pct_parent": "% of its parent", "flowjo_pct": "FlowJo's % of parent, where known", "f1": "agreement with FlowJo's gate, 0-1"}},
     "population_stats": {"name": "Count every gate", "kind": "measure", "takes": ["labels", "events", "gates", "samples", "model"], "makes": "table", "version": "2",
                          "about": "Count every gate in every sample: count, % of parent, % of total.", "reads_gates": True,
                          # what a script reading this table is told, so its fixture looks like the real thing
@@ -98,6 +107,19 @@ def run(exp_id: str, step: dict, samples: list[str] | None = None) -> dict:
     if op == "train_gate_model":
         r = models.train(exp_id, step.get("gate"))
         return {"status": "queued" if r["queued"] else "blocked", "summary": r["message"]}
+    if op == "autogate":
+        rows = models.table(exp_id, which)
+        if samples and store.path(exp_id, "tables", "autogate_counts.csv").exists():
+            rows = [r for r in lab.read_table(exp_id, "autogate_counts") if r["sample"] not in set(samples)] + rows
+        lab.save_table(exp_id, "autogate_counts", rows)
+        gates = [r for r in rows if r["sample"] in set(which)]
+        by_model = sum(1 for r in gates if r["model"] != "template_copy")
+        unsure = sum(1 for r in gates if r["low_confidence"])
+        f1 = [float(r["f1"]) for r in gates if r["f1"] != ""]
+        score = f"; median F1 against FlowJo {sorted(f1)[len(f1) // 2]:.3f}" if f1 else ""
+        return {"status": "done", "table": "autogate_counts",
+                "summary": f"Gated {len(which)} file{'s' if len(which) != 1 else ''} with {models.lab_for(exp_id) or 'the template'} "
+                           f"{models.version(exp_id)}: {by_model} gates by models, {len(gates) - by_model} template copies, {unsure} to review{score}."}
     if op == "population_stats":
         rows = lab.population_table(exp_id, samples)
         added = f" ({len(samples)} new file{'s' if len(samples) != 1 else ''})" if samples else ""

@@ -141,22 +141,70 @@ class Gate:
     kind: str = "polygon"
 
 
+def _words(text: str) -> set[str]:
+    return {w for w in re.split(r"[^a-z0-9]+", text.lower()) if w}
+
+
+def _assign(fcs: list[Path], wsps: list[Path]) -> dict[Path, list[tuple[Path, str]]]:
+    """Which FCS files each FlowJo workspace gates, and by what name inside it. A workspace names its
+    samples by the file name they had at acquisition ($FIL), so two groups (say ALS and healthy
+    controls) can each have a "Specimen_001_C1_C01.fcs"; a file then goes to the workspace whose own
+    name and folders share the most words with the file's name (ALS with ALS, HC with HC)."""
+    from urllib.parse import unquote
+
+    from flowkit._utils import wsp_utils  # the sample names and file paths a .wsp lists
+
+    listed = {}
+    for w in wsps:
+        try:
+            samples = wsp_utils.parse_wsp(str(w))["samples"]
+        except Exception:
+            log.warning("could not read %s", w, exc_info=True)
+            continue
+        listed[w] = {name: _words(w.stem + " " + unquote(str(d.get("sample_uri", "")))) for name, d in samples.items()}
+    out: dict[Path, list[tuple[Path, str]]] = {w: [] for w in listed}
+    for f in fcs:
+        kw = (fcs_header(f) or {}).get("keywords", {})
+        fil = kw.get("$FIL") or f.name
+        hits = [w for w, names in listed.items() if fil in names or f.name in names]
+        if not hits:
+            continue
+        # the words the file gained after acquisition, and the plate it was run on
+        own = (_words(f.stem) - _words(Path(fil).stem)) | _words(kw.get("PLATE NAME", ""))
+        best = max(hits, key=lambda w: len(own & listed[w].get(fil, listed[w].get(f.name, set()))))
+        out[best].append((f, fil if fil in listed[best] else f.name))
+    return out
+
+
 class Dataset:
-    """One folder of FCS files, read once and kept in memory."""
+    """One folder of FCS files, read once and kept in memory. A sample is known by its file name;
+    the folder may hold several FlowJo workspaces, each gating its own files."""
 
     def __init__(self, folder: Path):
         self.folder = folder
         self.lock = threading.Lock()
         self.fcs = sorted(folder.rglob("*.fcs"))
-        wsps = sorted(folder.rglob("*.wsp"))
-        self.wsp_path = wsps[0] if wsps else None
-        self.ws = None
-        if self.wsp_path:
-            try:
-                self.ws = fk.Workspace(str(self.wsp_path), fcs_samples=str(self.fcs[0].parent))
-            except Exception:
-                log.warning("could not read %s; using the FCS files alone", self.wsp_path, exc_info=True)
-                self.ws = None
+        self.wsps = sorted(folder.rglob("*.wsp"))
+        self.wsp_path = self.wsps[0] if self.wsps else None
+        self.workspaces: list[tuple[Path, fk.Workspace]] = []
+        self._where: dict[str, tuple[fk.Workspace, str]] = {}  # file name -> (its workspace, its name there)
+        if self.wsps and self.fcs:
+            for w, files in _assign(self.fcs, self.wsps).items():
+                if not files:
+                    continue
+                try:
+                    ws = fk.Workspace(str(w), fcs_samples=[str(f) for f, _ in files])
+                except Exception:
+                    log.warning("could not read %s; its files are used without gates", w, exc_info=True)
+                    continue
+                self.workspaces.append((w, ws))
+                loaded = set(ws.get_sample_ids())
+                for f, name in files:
+                    if name in loaded:
+                        self._where[f.name] = (ws, name)
+        self.ws = self.workspaces[0][1] if self.workspaces else None
+        if self.workspaces:
+            self.wsp_path = self.workspaces[0][0]
         self._samples: dict[str, fk.Sample] = {}
         self._events: dict[tuple[str, str], np.ndarray] = {}
         self._subset: dict[str, np.ndarray] = {}
@@ -166,9 +214,14 @@ class Dataset:
 
     @property
     def sample_ids(self) -> list[str]:
-        if self.ws:
-            return list(self.ws.get_sample_ids())
-        return [p.name for p in self.fcs]
+        """Files with gates first, in file order, then any the workspaces don't list."""
+        names = [p.name for p in self.fcs]
+        return [n for n in names if n in self._where] + [n for n in names if n not in self._where]
+
+    def workspace_for(self, sid: str) -> Path | None:
+        """The FlowJo workspace that gates a file, if any."""
+        ws = self._where.get(sid, (None, None))[0]
+        return next((p for p, w in self.workspaces if w is ws), None)
 
     def sample_path(self, sid: str) -> Path:
         """The FCS file a sample id names."""
@@ -176,8 +229,9 @@ class Dataset:
 
     def _sample(self, sid: str) -> fk.Sample:
         if sid not in self._samples:
-            if self.ws:
-                self._samples[sid] = self.ws.get_sample(sid)
+            if sid in self._where:
+                ws, name = self._where[sid]
+                self._samples[sid] = ws.get_sample(name)
             else:
                 p = next(f for f in self.fcs if f.name == sid)
                 self._samples[sid] = fk.Sample(str(p))
@@ -201,8 +255,9 @@ class Dataset:
     # ---- events in display space ------------------------------------------------------
 
     def _transforms(self, sid: str) -> dict:
-        if self.ws:
-            return self.ws.get_transforms(sid)
+        if sid in self._where:
+            ws, name = self._where[sid]
+            return ws.get_transforms(name)
         s = self._sample(sid)
         out = {}
         for pnn in s.pnn_labels:
@@ -216,7 +271,7 @@ class Dataset:
         s = self._sample(sid)
         cm = None
         if not raw:
-            cm = self.ws.get_comp_matrix(sid) if self.ws else None
+            cm = self._where[sid][0].get_comp_matrix(self._where[sid][1]) if sid in self._where else None
             if cm is None and "spill" in s.metadata:
                 try:
                     cm = fk.Matrix(s.metadata["spill"], s.pnn_labels)
@@ -258,16 +313,18 @@ class Dataset:
     # ---- gates ------------------------------------------------------------------------
 
     def _analyse(self, sid: str) -> None:
-        if self.ws and sid not in self._analysed:
+        if sid in self._where and sid not in self._analysed:
+            ws, name = self._where[sid]
             with self.lock:
-                self.ws.analyze_samples(sample_id=sid)
+                ws.analyze_samples(sample_id=name)
                 self._analysed.add(sid)
 
     def flowjo_gates(self, sid: str) -> list[Gate]:
-        if not self.ws:
+        if sid not in self._where:
             return []
         self._analyse(sid)
-        df = self.ws.get_gating_results(sid).report
+        ws, name = self._where[sid]
+        df = ws.get_gating_results(name).report
         gates = []
         for _, row in df.iterrows():
             path = tuple(row.gate_path)
@@ -275,7 +332,7 @@ class Dataset:
             parent = "/".join(path[1:]) or None
             g = Gate(key=key, name=row.gate_name, parent=parent, source="flowjo", kind=str(row.gate_type))
             try:
-                gd = self.ws.get_gate(sid, row.gate_name, gate_path=path)
+                gd = ws.get_gate(name, row.gate_name, gate_path=path)
                 g.dims = [d.id for d in gd.dimensions]
                 if hasattr(gd, "vertices"):
                     g.vertices = [[float(a), float(b)] for a, b in gd.vertices]
@@ -294,9 +351,10 @@ class Dataset:
 
     def flowjo_membership(self, sid: str, key: str) -> np.ndarray:
         self._analyse(sid)
+        ws, name = self._where[sid]
         parts = key.split("/")
         path = tuple(["root"] + parts[:-1])
-        return np.asarray(self.ws.get_gate_membership(sid, parts[-1], gate_path=path), dtype=bool)
+        return np.asarray(ws.get_gate_membership(name, parts[-1], gate_path=path), dtype=bool)
 
 
 @lru_cache(maxsize=8)
