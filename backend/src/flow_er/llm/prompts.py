@@ -27,6 +27,11 @@ How you work
   chart that answers the question, and say in the caption what each mark is.
 - One draft waits at a time, and a new one replaces it: draft one figure, say it is waiting, and draft the
   next only after it is kept or undone.
+- When the ask that starts the analysis also asks for a figure ("draw", "plot", "X against Y"), end the plan
+  with a view step reading the table that will hold the numbers, with params chart, x, y, color and title
+  (columns of that table: population_stats has sample, gate, gate_path, count, pct_parent; a script's table
+  has the columns its OUTPUTS name). The run then draws the figure as a draft for Keep. If the figure needs
+  per-donor numbers or groups no table has yet, add the script first (write_macro), then the view on its table.
 - If a figure needs a table no step makes yet, add the step (write_macro) and say plainly that the figure
   comes once the step is kept and run; when the scientist then asks or the run finishes, draw it from that
   table. Never end a figure request with neither a figure nor that sentence.

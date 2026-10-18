@@ -472,3 +472,30 @@ def test_a_script_tried_in_the_sandbox_on_one_file_keeps_nothing(exp):
     assert r["inputs"]["events"]["kind"] == "events" and r["inputs"]["events"]["files"] == 1
     after = sorted(p.name for p in store.path(exp, "tables").glob("*")) if store.path(exp, "tables").exists() else []
     assert after == before and not store.state(exp, "runs") and scripts.check(QC_SCRIPT)["ok"]
+
+
+@needs_data
+def test_a_figure_step_with_a_chart_draws_its_figure_as_a_draft_when_the_run_reaches_it(exp):
+    """A plan that ends on a figure: the run counts, then draws the named chart from the count table,
+    as a draft waiting for Keep (nothing kept by itself). A bad column fails the step and says why."""
+    from flow_er.workspace import executor
+    base = [
+        {"id": "comp", "op": "compensate", "inputs": ["fcs"], "outputs": ["ev"]},
+        {"id": "wsg", "op": "gate_from_workspace", "inputs": ["ev", "wsp"], "outputs": ["labels"]},
+        {"id": "count", "op": "population_stats", "inputs": ["labels"], "outputs": ["counts"]},
+    ]
+    fig = {"id": "fig", "op": "view", "title": "Share of each gate", "inputs": ["counts"], "outputs": ["figure"],
+           "params": {"chart": "bar", "x": "gate", "y": "pct_parent", "color": "sample", "agg": "none"}}
+    store.set_draft(exp, "plan", plan.validate(base + [fig]), "a plan with a figure")
+    store.keep(exp)
+    run = executor.start(exp, wait=True)
+    assert run["nodes"]["fig"]["status"] == "done", run["nodes"]["fig"]
+    d = store.draft(exp)
+    assert d["kind"] == "view" and d["payload"]["table"] == "population_stats" and d["payload"]["y"] == "pct_parent"
+    assert not store.state(exp, "views")
+    store.undo(exp)
+    bad = {**fig, "params": {**fig["params"], "y": "no_such_column"}}
+    store.set_draft(exp, "plan", plan.validate(base + [bad]), "a figure on a missing column")
+    store.keep(exp)
+    node = executor.start(exp, wait=True)["nodes"]["fig"]
+    assert node["status"] == "failed" and "no_such_column" in node["summary"]

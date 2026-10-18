@@ -84,8 +84,7 @@ export type NodeType = { name: string; kind: string; takes: string[]; makes: str
   params?: Record<string, { label: string; enum?: string[]; default?: string; names?: Record<string, string>; choices?: "channels" | "gates" }> };
 export type StepImage = { port: string; role: "input" | "output"; kind: string; grid: number[][]; meta: { x?: string; y?: string; parent?: string; recipe?: string; events?: number } };
 /** One file gated by the lab's models: per gate the polygon, numbers, which model answered and how sure it was. */
-export type SandboxOut = { kind: "table"; columns: string[]; rows: string[][]; total: number; for_file?: number | null } | { kind: "events"; files: number; events: number; per_file: Record<string, number> };
-export type SandboxTry = { sample: string; status: string; summary?: string; seconds?: number; outputs?: Record<string, SandboxOut>; inputs?: Record<string, SandboxOut> };
+export type AutogateLive = { running: boolean; files: string[]; done: string[]; fresh: string[]; current: string | null; lab: string | null; version: string };
 export type AutogateGate = {
   gate: string; parent: string; x: string; y: string; model: string; count: number; parent_count: number; percent_of_parent: number;
   confidence: number | null; low_confidence: boolean; flowjo_pct?: number; f1?: number; error_pp?: number;
@@ -222,9 +221,8 @@ export const api = {
     req<{ files: string[]; file?: string; images: StepImage[] }>("GET", `/experiments/${id}/steps/${encodeURIComponent(step)}/images${q({ file })}`),
   autogateFiles: (id: string) => req<{ lab: string | null; version: string; files: { sample: string; gated: boolean }[] }>("GET", `/experiments/${id}/autogate`),
   autogateResult: (id: string, sample: string) => req<AutogateResult>("GET", `/experiments/${id}/autogate/${encodeURIComponent(sample)}/result`),
-  /** a script step tried on one file in the sandbox: what it read and what it made; nothing is kept */
-  tryStep: (id: string, step: string, sample?: string) =>
-    req<SandboxTry>("POST", `/experiments/${id}/steps/${encodeURIComponent(step)}/try${sample ? `?sample=${encodeURIComponent(sample)}` : ""}`),
+  /** the models at work: the run's files, the one being gated now, those done (and done just now) */
+  autogateLive: (id: string) => req<AutogateLive>("GET", `/experiments/${id}/autogate/live`),
   autogateReview: (id: string, sample: string) =>
     req<{ gates: string[]; sample: string; parent: string | null; x: string; y: string; gate: string }>("POST", `/experiments/${id}/autogate/${encodeURIComponent(sample)}/review`),
   autogateAccept: (id: string, sample: string) =>

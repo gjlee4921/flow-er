@@ -54,6 +54,13 @@ def autogate_files(exp_id: str) -> dict:
             "files": [{"sample": s, "gated": models.result(exp_id, s) is not None} for s in ds.sample_ids]}
 
 
+@router.get("/experiments/{exp_id}/autogate/live")
+def autogate_live(exp_id: str) -> dict:
+    """The models at work: the run's files, the one being gated now, and those done (and done just now)."""
+    _exp(exp_id)
+    return models.live(exp_id)
+
+
 @router.get("/experiments/{exp_id}/autogate/{sample:path}/result")
 def autogate_result(exp_id: str, sample: str, run: bool = True) -> dict:
     """One file's model gates: per gate the polygon (display and raw units), count, % of parent, the

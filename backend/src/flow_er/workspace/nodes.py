@@ -49,8 +49,13 @@ NODE_TYPES: dict[str, dict] = {
                      "about": "A Prism-ready CSV: one row per file, one column per gate.",
                      "params": {"value": {"label": "Value in each cell", "enum": ["pct_parent", "count", "pct_total"], "default": "pct_parent",
                                           "names": {"pct_parent": "% of parent", "count": "Count", "pct_total": "% of total"}}}},
-    "view": {"name": "Figure", "kind": "view", "takes": ["table"], "makes": "figure", "version": "1",
-             "about": "A figure drawn from a saved table."},
+    "view": {"name": "Figure", "kind": "view", "takes": ["table"], "makes": "figure", "version": "2",
+             "about": "A figure drawn from the table it reads. With a chart named (chart, x, y, colour: columns of "
+                      "that table), the run draws it as a draft that waits on the results page for Keep.",
+             "params": {"chart": {"label": "Chart", "enum": [None, "bar", "dot", "dumbbell", "line", "scatter", "heatmap", "table"], "default": None},
+                        "x": {"label": "Across (a column)"}, "y": {"label": "Value (a column)"}, "color": {"label": "Colour by (a column)"},
+                        "title": {"label": "Title"}, "y_label": {"label": "Value label"},
+                        "agg": {"label": "Combine rows", "enum": ["none", "mean", "sum", "max", "min"], "default": "none"}}},
 }
 
 
@@ -141,8 +146,29 @@ def run(exp_id: str, step: dict, samples: list[str] | None = None) -> dict:
         table_for, events_from = script_inputs(exp_id, step)
         return scripts.run_step(exp_id, step, step["script"], table_for, samples, events_from)
     if op == "view":
-        return {"status": "done", "summary": "Figures draw themselves from their table."}
+        return _draw(exp_id, step)
     return {"status": "failed", "summary": f"No step of kind {op}."}
+
+
+def _draw(exp_id: str, step: dict) -> dict:
+    """A figure step: with a chart named, the figure drawn from the table it reads, as a draft for
+    Keep (so a run that measures can end on its figure); without one, nothing to do."""
+    from flow_er.workspace import views
+    p = step.get("params") or {}
+    if not p.get("chart") or not p.get("y"):
+        return {"status": "done", "summary": "Figures draw themselves from their table."}
+    inp = (step.get("inputs") or [None])[0]
+    table = inp if inp and store.path(exp_id, "tables", f"{inp}.csv").exists() else script_inputs(exp_id, step)[0].get(inp)
+    spec = {"title": p.get("title") or step.get("title"), "type": p["chart"], "table": table, "x": p.get("x"), "y": p["y"],
+            "color": p.get("color"), "agg": p.get("agg") or "none", "y_label": p.get("y_label"), "caption": step.get("why") or ""}
+    try:
+        v = views.validate(exp_id, spec)
+    except ValueError as e:
+        return {"status": "failed", "summary": f"The figure could not be drawn: {e}"}
+    if store.draft(exp_id):
+        return {"status": "done", "summary": f"The figure is ready to draw from {table}; keep or undo what is waiting, then run again."}
+    store.set_draft(exp_id, "view", v, f"A {v['type']} view: {v['title']}")
+    return {"status": "done", "summary": f"Drew '{v['title']}' from {table}; it waits on the results page for Keep."}
 
 
 def script_inputs(exp_id: str, step: dict) -> tuple[dict, dict]:
