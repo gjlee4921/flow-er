@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from flow_er.ml.unet.polygon import polygon_area, prob_to_polygon
+from flow_er.ml.unet.polygon import EDGE_OUT, polygon_area, prob_to_polygon
 
 
 def test_disc_gives_circle():
@@ -21,5 +21,5 @@ def test_edge_gate_closes_and_empty_map_gives_none():
     prob[:, 70:] = 1.0                       # touches three edges
     xy = prob_to_polygon(prob)
     assert xy is not None
-    assert xy[:, 0].max() == 1.0 and abs(xy[:, 0].min() - 0.695) < 0.01
+    assert xy[:, 0].max() == EDGE_OUT[1] and abs(xy[:, 0].min() - 0.695) < 0.01   # past the edge
     assert prob_to_polygon(np.zeros((101, 101))) is None

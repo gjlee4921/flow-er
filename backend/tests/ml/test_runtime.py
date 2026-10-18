@@ -153,3 +153,14 @@ def test_router_order(tmp_path):
     assert [v["current"] for v in registry.list_versions("lab1")] == [True, False]
     prob = registry.route("lab1", "Cells").predict(np.ones((101, 101)), np.zeros((101, 101)))
     assert prob.shape == (101, 101) and ((0 <= prob) & (prob <= 1)).all()
+
+
+def test_gate_drawn_to_the_axis_keeps_the_cells_beyond_it():
+    from flow_er.ml.gatetree import inside
+    from flow_er.ml.unet.polygon import EDGE_OUT, prob_to_polygon
+    prob = np.zeros((101, 101))
+    prob[40:80, :30] = 1                                   # a gate touching the left edge
+    poly = prob_to_polygon(prob)
+    assert poly[:, 0].min() == EDGE_OUT[0]
+    cells = np.array([[-0.02, 0.6], [0.0, 0.6], [0.1, 0.6], [0.5, 0.6]])  # below / on the axis
+    assert inside(poly, cells).tolist() == [True, True, True, False]

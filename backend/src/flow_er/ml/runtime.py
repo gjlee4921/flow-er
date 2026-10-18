@@ -16,7 +16,7 @@ from flow_er.cytometry.gating import compensate
 from flow_er.cytometry.io import FcsFile
 from flow_er.ml import images, registry
 from flow_er.ml.gatetree import GateTree, inside, template_mask
-from flow_er.ml.unet.polygon import polygon_to_raw, prob_to_polygon
+from flow_er.ml.unet.polygon import extend_to_edges, polygon_to_raw, prob_to_polygon
 
 MAX_IMAGE_CELLS = 200_000      # parent cells used for each density image (seed 0)
 PLOT_CELLS = 20_000            # sampled parent cells returned for plotting
@@ -143,8 +143,8 @@ def autogate(fcs_path: str | Path, tree: GateTree, lab: str | None = None,
         template = spec.template_array()
         predictor = registry.route(lab, spec.key, spec.qc) if use_models else None
         if predictor is None or len(cells) == 0:
-            prob, polygon, model_id = None, template if len(template) >= 3 else None, \
-                registry.TEMPLATE_COPY
+            prob, model_id = None, registry.TEMPLATE_COPY
+            polygon = extend_to_edges(template) if len(template) >= 3 else None
             member = inside(polygon, disp)
             confidence = None
         else:
@@ -179,7 +179,7 @@ def apply_polygon(result: GatingResult, tree: GateTree, gate_key: str,
     channels = tree.channels()
     values = read_values(fcs, channels, comp)
     polygons = {k: g.polygon_display for k, g in result.gates.items()}
-    polygons[gate_key] = np.asarray(polygon_display, float)
+    polygons[gate_key] = extend_to_edges(polygon_display)    # drawn to the axis = past it
     below = [g for g in tree.gates if g.key == gate_key or g.key.startswith(gate_key + "/")]
     for spec in below:
         old = result.gates[spec.key]
