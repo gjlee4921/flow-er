@@ -16,6 +16,11 @@ export function nextLive(l: Live, e: TurnEvent): Live {
   if (e.type === "plan_partial") return { ...l, phase: `Laying out the plan: ${e.steps.length} step${e.steps.length === 1 ? "" : "s"} so far` };
   if (e.type === "step") return { ...l, phase: e.label, steps: [...l.steps, { i: e.i, label: e.label, done: false, ok: false }] };
   if (e.type === "step_done") return { ...l, steps: l.steps.map((s) => (s.i === e.i ? { ...s, done: true, ok: e.ok, summary: e.summary } : s)) };
+  // a long step saying what it is doing now (the script writer searching, reading, testing)
+  if (e.type === "ui") {
+    const p = [...e.events].reverse().find((u) => u.type === "progress");
+    if (p && p.type === "progress") return { ...l, steps: l.steps.map((s, k) => (k === l.steps.length - 1 && !s.done ? { ...s, summary: p.text } : s)) };
+  }
   return l;
 }
 

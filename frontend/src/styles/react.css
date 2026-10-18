@@ -402,3 +402,9 @@
 .flow-rf .node.running { border-style: solid; border-color: var(--text-3); box-shadow: 0 0 0 3px var(--hover), var(--shadow); }
 .node .badge.run { padding: 3px 5px; line-height: 0; }
 .node .badge.run .spin { display: block; width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--sep-2); border-top-color: var(--text-2); animation: spin .8s linear infinite; }
+/* a script step's code tab: where it came from, its licence and test, then the code */
+.np-script { display: grid; gap: 10px; min-width: 0; } .np-script > p { margin: 0; }
+.np-prov { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 12px; margin: 0; font-size: 12.5px; }
+.np-prov dt { color: var(--text-3); } .np-prov dd { margin: 0; overflow-wrap: anywhere; color: var(--text-2); }
+.np-prov dd.ok { color: #4f7a5c; } .np-prov dd.bad { color: var(--c-flag); }
+.np-code { margin: 0; max-height: 320px; overflow: auto; padding: 10px 12px; border: 1px solid var(--sep); border-radius: var(--r-ctl); background: var(--panel); font: 11.5px/1.5 var(--mono); color: var(--text); white-space: pre; }
