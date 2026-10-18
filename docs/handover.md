@@ -92,6 +92,10 @@ the models' display (the same transform as above), so a gate means the same cell
 model polygon needs no conversion; FlowJo's own gates are moved into it. A reviewed gate remembers
 its file (`reviewed_on`), and only that file's corrections are taught from it.
 
+Raw files with no FlowJo workspace work too: the project finds its lab by panel (every channel the
+lab's gates are drawn on is in the files), and the review nests each model gate under the model's own
+parent, since there are no FlowJo gates to hang them on.
+
 Per-sample metadata the app must collect: `individual` (the person or animal the sample came from)
 and, for cytokine panels, which file is that individual's unstimulated well.
 
