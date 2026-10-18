@@ -6,7 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { api, type Dataset, type Rejected } from "../../api";
 import { useDatasets, useExperiments, useHealth } from "../../api/hooks";
 import { Flower, Icon } from "../../components/icons";
-import { fmt, ui } from "../../lib";
+import { fmt, lastProject, ui } from "../../lib";
 
 const KIND = { example: "Example", upload: "Uploaded", folder: "On this computer" } as const;
 
@@ -67,6 +67,8 @@ export default function Start() {
   };
 
   const shown = useMemo(() => recent.filter((e) => e.title.toLowerCase().includes(find.trim().toLowerCase())), [recent, find]);
+  // the project you had open last, one click away (the app no longer jumps into it by itself)
+  const last = recent.find((e) => e.id === lastProject() && !e.archived);
 
   return (
     <main className="ws-chat">
@@ -75,6 +77,12 @@ export default function Start() {
           <h1>Start an analysis</h1>
           <p>Say what the experiment is for and bring its data. flow-er plans the analysis from there, and nothing changes until you keep it.</p>
         </header>
+        {last && (
+          <button className="st-continue" onClick={() => ui.openProject(last.id)}>
+            <span className="k">Continue</span><b>{last.title}</b>
+            <span className="d">{last.figures ? `${last.figures} figure${last.figures > 1 ? "s" : ""} · ` : ""}{last.created.slice(0, 10)}</span><Icon.caret />
+          </button>
+        )}
         {health && health.llm_key !== "loaded" && (
           <p className="note warn">The agent has no model key yet: set <code>OPENAI_API_KEY</code> in <code>backend/.env</code>.</p>
         )}

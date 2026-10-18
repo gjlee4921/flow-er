@@ -432,13 +432,21 @@
 /* the autogate step's panel: per-gate table with the unsure ones flagged, actions, the lab's versions */
 .ag-panel { display: grid; gap: 10px; min-width: 0; margin-bottom: 8px; }
 .ag-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.ag-tbl td:first-child { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ag-tbl { width: 100%; }
+.ag-tbl td, .ag-tbl th { white-space: nowrap; }
+.ag-tbl td:first-child { max-width: 128px; overflow: hidden; text-overflow: ellipsis; }
+.ag-tbl .ag-fj { color: var(--text-3); }
+.ag-dot { display: inline-block; width: 7px; height: 7px; margin-left: 5px; border-radius: 2px; background: var(--c-flag); vertical-align: 1px; }
 .ag-tbl tr.ag-unsure td { background: color-mix(in srgb, var(--c-flag) 7%, transparent); }
 .ag-flag { margin-left: 6px; font-size: 10.5px; font-weight: 600; padding: 1px 6px; border-radius: var(--r-tag); color: var(--c-flag); background: color-mix(in srgb, var(--c-flag) 10%, var(--raised)); }
 .ag-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .ag-models ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
 .ag-models li { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; color: var(--text-2); }
-.ag-models li small { color: var(--text-3); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ag-models li small { color: var(--text-3); min-width: 0; }
+.ag-versions summary { cursor: pointer; font-size: 12.5px; color: var(--text-2); list-style: none; }
+.ag-versions summary::-webkit-details-marker { display: none; }
+.ag-versions summary::before { content: "▸ "; color: var(--text-3); }
+.ag-versions[open] summary::before { content: "▾ "; }
 .ag-models li.on > span:first-child { font-weight: 600; color: var(--text); }
 
 /* Selected things wear the flower pink: the page you are on, the gate, file or step you picked, the tab
@@ -462,3 +470,32 @@
 .composer.over { border-color: var(--fl-core); box-shadow: 0 0 0 3px var(--sel); }
 input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):focus-visible, select:focus-visible, .ctx textarea:focus {
   outline: none; border-color: var(--fl-core); box-shadow: 0 0 0 3px var(--sel); }
+
+/* buttons answer the pointer in pink: a pink wash on plain buttons, the flower pink on the dark ones */
+.btn:not(.ink):not(:disabled):hover { background: var(--hover); border-color: var(--sel-line); color: var(--text); }
+.btn.ink:not(:disabled):hover { background: var(--fl-core); border-color: var(--fl-core); opacity: 1; }
+.btn.plain:not(:disabled):hover { border-color: transparent; }
+.suggest button:hover, .ag-sug button:hover, .tb:hover { border-color: var(--sel-line); }
+.btn { transition: background .15s, border-color .15s, transform .1s; }
+
+/* the start page's way back into the last project */
+.st-continue { all: unset; display: flex; align-items: center; gap: 10px; padding: 11px 14px; border: 1px solid var(--sep-2); border-radius: var(--r-ctl); background: var(--raised); cursor: pointer; font-size: 14px; transition: background .15s, border-color .15s; }
+.st-continue:hover { background: var(--hover); border-color: var(--sel-line); }
+.st-continue .k { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--fl-core); }
+.st-continue b { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-continue .d { margin-left: auto; color: var(--text-3); font-size: 12.5px; white-space: nowrap; }
+.st-continue .i { width: 12px; height: 12px; color: var(--text-3); flex: none; }
+.st-continue:focus-visible { outline: 2px solid var(--fl-core); outline-offset: 2px; }
+
+/* the key that does the same as a button (K keep, U undo) */
+.btn kbd { margin-left: 6px; font: 600 10px var(--font); padding: 0 4px; border-radius: 4px; border: 1px solid currentColor; opacity: .55; line-height: 1.5; }
+
+/* The canvas and a step's details side by side (full width) or one above the other (the side panel).
+   The details are docked, never laid over the steps, and the canvas re-fits into what is left. */
+.flow-split { display: flex; height: 100%; min-height: 0; min-width: 0; }
+.flow-split.down { flex-direction: column; }
+.flow-split > .flow-wrap.flow-rf { flex: 1; min-width: 0; min-height: 0; height: auto; }
+.inspector.node-dock { position: relative; inset: auto; flex: none; width: 420px; margin: 12px 12px 12px 0; box-shadow: var(--shadow); }
+.ag-tbl th, .ag-tbl td { padding-left: 6px; padding-right: 6px; }
+.flow-split.down .inspector.node-dock { width: auto; height: min(56%, 460px); margin: 0 12px 12px; }
+.node-dock .insp-h { border-bottom: 1px solid var(--sep); }

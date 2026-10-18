@@ -16,7 +16,7 @@ import {
 } from "../../api/hooks";
 import { DensityImage } from "../../components/plots/DensityImage";
 import { Flower, Icon } from "../../components/icons";
-import { clamp, fmt, ui, useUi } from "../../lib";
+import { clamp, fmt, gateLabel, ui, useUi } from "../../lib";
 import { askInChat, sendInChat } from "../agent/Chat";
 
 const COLS = ["source", "macro", "model", "measure", "view"] as const;
@@ -45,8 +45,8 @@ function StepCard({ id, data: d }: NodeProps<RFNode<Card>>) {
   const st = d.run?.status;
   // the stage goes in as k-<stage>: React Flow takes any element classed "source" or "target" for a port
   return (
-    <div className={`node ${d.status} k-${d.kind}${st ? ` ran-${st}` : ""}${st === "running" ? " running" : ""}${d.build != null ? " build" : ""}${d.selected ? " sel" : ""}`}
-      style={{ width: NW, ["--k" as string]: KIND_COL[d.kind] ?? KIND_COL.source, ["--i" as string]: d.build ?? 0 }}>
+    <div title={d.title} className={`node ${d.status} k-${d.kind}${st ? ` ran-${st}` : ""}${st === "running" ? " running" : ""}${d.build != null ? " build" : ""}${d.selected ? " sel" : ""}`}
+      style={{ width: (d.w as number | undefined) ?? NW, ["--k" as string]: KIND_COL[d.kind] ?? KIND_COL.source, ["--i" as string]: d.build ?? 0 }}>
       {d.inputs.length > 0 && <Handle type="target" position={d.down ? Position.Top : Position.Left} className="port in" isConnectable={false} />}
       {d.outputs.length > 0 && <Handle type="source" position={d.down ? Position.Bottom : Position.Right} className="port out" isConnectable={false} />}
       <span className="nic"><I /></span>
@@ -76,7 +76,16 @@ function Canvas({ s }: { s: ExperimentState }) {
   const [showRuns, setShowRuns] = useState(false);
   const [viewRun, setViewRun] = useState<Execution | null>(null);
   const wrap = useRef<HTMLDivElement>(null);
+  const outer = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
+  const [outerW, setOuterW] = useState(800);
+  useEffect(() => {
+    const el = outer.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setOuterW(el.clientWidth));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   useEffect(() => {
     const el = wrap.current;
     if (!el) return;
@@ -84,7 +93,8 @@ function Canvas({ s }: { s: ExperimentState }) {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  const down = size.w < NARROW;
+  // the layout follows the whole panel's width, so opening a step's details never flips it
+  const down = outerW < NARROW;
   const lastRun = useMemo(() => Object.fromEntries(s.runs.map((r) => [r.step, r])), [s.runs]);
   // in a draft, only the steps it adds or changes are drafts; the rest are the kept steps as they were
   const kept = useMemo(() => Object.fromEntries(s.plan.map((k) => [k.id, k])), [s.plan]);
@@ -111,9 +121,7 @@ function Canvas({ s }: { s: ExperimentState }) {
     return src.concat(stepCards, figCards);
   }, [s, steps, draftPlan, building, lastRun, kept]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const pos = useMemo(() => {
-    const rows: Record<number, number> = {};
-    const out: Record<string, [number, number]> = {};
+  const { pos, widths } = useMemo(() => {
     const lane: Record<string, number> = {};
     for (const n of cards) {
       // a stage per lane; a script sits with the latest stage it reads from (one reading the counts,
@@ -126,10 +134,23 @@ function Canvas({ s }: { s: ExperimentState }) {
         }
       }
       lane[n.id] = c;
-      const r = (rows[c] = (rows[c] ?? -1) + 1);
-      out[n.id] = down ? [30 + r * (NW + GAPD), 40 + c * ROWD] : [30 + c * COLW, 40 + r * ROWH];
     }
-    return out;
+    const out: Record<string, [number, number]> = {}, w: Record<string, number> = {};
+    const byLane: Record<number, Card[]> = {};
+    for (const n of cards) (byLane[lane[n.id]] ??= []).push(n);
+    if (down) {
+      // stacked: every row is one width, centred on the panel's middle; the cards of a row share it,
+      // so the rows' left and right edges line up however many cards each holds
+      const most = Math.max(1, ...Object.values(byLane).map((r) => r.length));
+      const ROW = Math.max(NW, most * 172 + (most - 1) * GAPD);
+      for (const [c, row] of Object.entries(byLane)) {
+        const cw = (ROW - (row.length - 1) * GAPD) / row.length;
+        row.forEach((n, k) => { out[n.id] = [30 + k * (cw + GAPD), 40 + Number(c) * ROWD]; w[n.id] = cw; });
+      }
+    } else {
+      for (const [c, row] of Object.entries(byLane)) row.forEach((n, r) => { out[n.id] = [30 + Number(c) * COLW, 40 + r * ROWH]; w[n.id] = NW; });
+    }
+    return { pos: out, widths: w };
   }, [cards, down]);
 
   // the order a draft's new steps appear in: by column, then row; kept for as long as they are shown
@@ -142,7 +163,7 @@ function Canvas({ s }: { s: ExperimentState }) {
   const nodes: RFNode<Card>[] = cards.map((n) => ({
     id: n.id, type: "step", position: { x: pos[n.id][0], y: pos[n.id][1] }, draggable: false,
     sourcePosition: down ? Position.Bottom : Position.Right, targetPosition: down ? Position.Top : Position.Left,
-    data: { ...n, run: shownRun?.[n.id], build: built.current.get(n.id), selected: sel === n.id, down },
+    data: { ...n, run: shownRun?.[n.id], build: built.current.get(n.id), selected: sel === n.id, down, w: widths[n.id] },
   }));
   const edges: RFEdge[] = [];
   for (const n of cards) for (const inp of n.inputs) {
@@ -160,15 +181,22 @@ function Canvas({ s }: { s: ExperimentState }) {
   const layoutKey = cards.map((n) => `${n.kind}:${n.id}`).join("|");
   useEffect(() => {
     const { w, h } = size;
-    const ps = Object.values(pos);
-    const maxX = Math.max(...ps.map((p) => p[0])) + NW + 30, maxY = Math.max(...ps.map((p) => p[1])) + 72 + 20;
-    const top = 58, bottom = 56;
+    const ids = Object.keys(pos);
+    const maxX = Math.max(...ids.map((id) => pos[id][0] + (widths[id] ?? NW))) + 30, maxY = Math.max(...ids.map((id) => pos[id][1])) + 72 + 20;
+    const top = 58, bottom = down ? 20 : 56;
     const k = clamp(Math.min((w - 24) / maxX, (h - top - bottom) / maxY), 0.62, 1);
     const fitsX = maxX * k <= w - 24, fitsY = maxY * k <= h - top - bottom;
-    const x = fitsX ? (w - maxX * k) / 2 : building && !down ? w - 12 - maxX * k : 0;
-    const y = fitsY || !building || !down ? top : h - bottom - maxY * k;
+    // centred on the panel's middle when it fits; while the agent builds, follow the newest step
+    let x = fitsX || down ? (w - maxX * k) / 2 : building ? w - 12 - maxX * k : 0;
+    let y = fitsY || !building || !down ? top : h - bottom - maxY * k;
+    // the step whose details are open stays in view above (or beside) them
+    if (sel && pos[sel]) {
+      const ny = y + pos[sel][1] * k, nx = x + pos[sel][0] * k;
+      if (ny < top || ny + 72 * k > h - bottom) y = (h - 72 * k) / 2 - pos[sel][1] * k;
+      if (nx < 8 || nx + (widths[sel] ?? NW) * k > w - 8) x = (w - (widths[sel] ?? NW) * k) / 2 - pos[sel][0] * k;
+    }
     rf.setViewport({ x, y, zoom: k }, { duration: 450 });
-  }, [layoutKey, size.w, size.h]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [layoutKey, size.w, size.h, sel, down]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const runAll = async (mode = "all", node?: string) => {
     setViewRun(null);
@@ -196,7 +224,8 @@ function Canvas({ s }: { s: ExperimentState }) {
 
   const selCard = cards.find((n) => n.id === sel);
   return (
-    <div className={`flow-wrap flow-rf${showRuns || selCard?.step ? " side" : ""}`} ref={wrap}>
+    <div className={`flow-split${down ? " down" : ""}${selCard?.step ? " docked" : ""}`} ref={outer}>
+    <div className={`flow-wrap flow-rf${showRuns ? " side" : ""}`} ref={wrap}>
       <ReactFlow nodes={nodes} edges={edges} nodeTypes={NODE_TYPES} minZoom={0.3} maxZoom={1.6} proOptions={{ hideAttribution: true }}
         nodesConnectable={false} nodesDraggable={false} zoomOnScroll={false} panOnScroll zoomActivationKeyCode="Meta"
         onNodeClick={(_, n) => (n.data.fig ? ui.open("results") : setSel(sel === n.id ? null : n.id))} onPaneClick={() => setSel(null)}>
@@ -240,6 +269,7 @@ function Canvas({ s }: { s: ExperimentState }) {
           </div>
         </aside>
       )}
+    </div>
       {selCard?.step && <NodePanel s={s} card={selCard} draft={!!draftPlan || building} onClose={() => setSel(null)} onRun={runAll} run={shownRun?.[selCard.id]} />}
     </div>
   );
@@ -376,15 +406,15 @@ function AutogatePanel({ s }: { s: ExperimentState }) {
       {isFetching && !res && <p className="np-status"><Flower className="sm" /> Gating {sample && short(sample)}…</p>}
       {!!gates.length && (
         <div className="n-tblwrap np-tbl"><table className="n-tbl ag-tbl">
-          <thead><tr><th>Gate</th><th>Model</th><th>Sure</th><th>%</th><th>FlowJo %</th><th>F1</th></tr></thead>
+          {/* five narrow columns, so the panel shows them all: the model's % beside FlowJo's, and a dot for "review this" */}
+          <thead><tr><th>Gate</th><th>By</th><th title="How sure the model is (0 to 1); a dot means review this gate">Sure</th><th title="% of parent: the model's, then FlowJo's">% · FlowJo</th><th title="Overlap with FlowJo's gate, cell by cell (1 is identical)">F1</th></tr></thead>
           <tbody>{gates.map((g) => (
             <tr key={g.gate} className={g.low_confidence ? "ag-unsure" : ""}>
-              <td title={g.gate}>{g.gate.split("/").pop()}</td>
-              <td>{g.model.includes("/unito/") ? "U-Net" : g.model === "template_copy" ? "Template" : g.model}</td>
-              <td>{g.confidence == null ? "—" : <>{g.confidence.toFixed(2)}{g.low_confidence && <span className="ag-flag" title="Review this gate">review</span>}</>}</td>
-              <td>{g.percent_of_parent.toFixed(2)}</td>
-              <td>{g.flowjo_pct == null ? "—" : g.flowjo_pct.toFixed(2)}</td>
-              <td>{g.f1 == null ? "—" : g.f1.toFixed(3)}</td>
+              <td title={g.gate}>{gateLabel(g.gate.split("/").pop() ?? "")}</td>
+              <td title={g.model}>{g.model.includes("/unito/") ? "U-Net" : g.model === "template_copy" ? "Copy" : g.model}</td>
+              <td>{g.confidence == null ? "—" : g.confidence.toFixed(2)}{g.low_confidence && <i className="ag-dot" title="Review this gate" aria-label="review" />}</td>
+              <td>{g.percent_of_parent.toFixed(2)}<span className="ag-fj"> · {g.flowjo_pct == null ? "—" : g.flowjo_pct.toFixed(2)}</span></td>
+              <td>{g.f1 == null ? "—" : g.f1.toFixed(2)}</td>
             </tr>
           ))}</tbody>
         </table>
@@ -398,10 +428,17 @@ function AutogatePanel({ s }: { s: ExperimentState }) {
         <div className="ag-models"><b className="small">Models for lab {lab.lab}</b>
           {lab.taught && <p className="small muted" id="ag-taught">Taught so far: {lab.taught.samples} {lab.taught.samples === 1 ? "file" : "files"} from {lab.taught.individuals.length} {lab.taught.individuals.length === 1 ? "donor" : "donors"}{lab.taught.individuals.length ? ` (${lab.taught.individuals.join(", ")})` : ""}</p>}
           {lab.taught && <button className="btn sm" id="ag-retrain" onClick={retrain} disabled={job?.status === "running" || lab.taught.individuals.length < 2}
-            title={lab.taught.individuals.length < 2 ? "Teach a file from at least two donors first" : "Train new models on the kept gates; a version is used only if it is better"}>
+            title="Train new models on the kept gates; a version is used only if it is better">
             {job?.status === "running" ? <><Flower className="sm" /> Retraining…</> : "Retrain on the kept gates"}</button>}
+          {/* why the button is off, said plainly rather than only on hover */}
+          {lab.taught && lab.taught.individuals.length < 2 && !job && (
+            <p className="small muted" id="ag-why">Retraining compares on a donor it did not learn from, so it needs kept gates from 2 donors; {lab.taught.individuals.length ? "1 so far. Teach a file from another donor." : "none yet. Review a file, then Teach the models."}</p>
+          )}
           {job && <p className="small muted" id="ag-job">{job.status === "running" ? job.lines.at(-1) ?? "starting" : job.status === "done" ? job.summary?.reason : job.error}</p>}
-          <ul>{lab.versions.map((v) => <li key={v.version} className={v.current ? "on" : ""}><span>{v.version}</span>{v.current && <span className="pill">current</span>}<small>{v.notes}</small></li>)}</ul>
+          <details className="ag-versions">
+            <summary>Versions ({lab.versions.length}){lab.versions.find((v) => v.current) ? ` · ${lab.versions.find((v) => v.current)!.version} in use` : ""}</summary>
+            <ul>{lab.versions.map((v) => <li key={v.version} className={v.current ? "on" : ""}><span>{v.version}</span>{v.current && <span className="pill">current</span>}<small>{v.notes}</small></li>)}</ul>
+          </details>
         </div>
       )}
     </div>
@@ -429,7 +466,7 @@ function NodePanel({ s, card, draft, onClose, onRun, run }: { s: ExperimentState
   const rows = out?.rows ?? [];
   const cols = rows.length ? Object.keys(rows[0]).slice(0, 6) : [];
   return (
-    <aside className="inspector node-panel" aria-label={card.title}>
+    <aside className="inspector node-panel node-dock" aria-label={card.title}>
       <div className="insp-h"><span className="np-t"><b>{card.title}</b><small>{type?.name ?? step.op}</small></span><button className="ib sm" aria-label="Close" onClick={onClose}><Icon.close /></button></div>
       <div className="np-tabs" role="tablist">
         {(step.script ? (["input", "code", "output"] as const) : (["input", "settings", "output"] as const)).map((t) => (

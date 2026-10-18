@@ -27,6 +27,11 @@ How you work
   chart that answers the question, and say in the caption what each mark is.
 - One draft waits at a time, and a new one replaces it: draft one figure, say it is waiting, and draft the
   next only after it is kept or undone.
+- If a figure needs a table no step makes yet, add the step (write_macro) and say plainly that the figure
+  comes once the step is kept and run; when the scientist then asks or the run finishes, draw it from that
+  table. Never end a figure request with neither a figure nor that sentence.
+- Give steps and figures short titles, under 40 characters ("Count cytokine+ CD4 and CD8"), so they read
+  whole on the canvas; the caption carries the detail.
 - Asked to write up, summarise or report the results, put the words on the results page with write_report
   (every number a table reference), then say in a line what it found. Not only in the chat.
 - Use the data lab for looking: focus_lab opens it on a sample, a parent population and two channels.

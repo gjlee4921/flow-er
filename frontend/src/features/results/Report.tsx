@@ -39,6 +39,14 @@ const csv = (rows: Record<string, unknown>[]) => {
 function Figure({ v, n, onDecide }: { v: View; n: number; onDecide: (keep: boolean) => void }) {
   const [wide, setWide] = useState(false);
   const [rowsOpen, setRowsOpen] = useState(false);
+  const [more, setMore] = useState(false);
+  // the menu closes on a click anywhere else, or Escape
+  useEffect(() => {
+    if (!more) return;
+    const close = (e: Event) => { if (e instanceof KeyboardEvent ? e.key === "Escape" : !(e.target as Element).closest?.(".rp-more")) setMore(false); };
+    window.addEventListener("pointerdown", close); window.addEventListener("keydown", close);
+    return () => { window.removeEventListener("pointerdown", close); window.removeEventListener("keydown", close); };
+  }, [more]);
   const copy = async () => {
     try { await navigator.clipboard.writeText(csv(v.rows)); ui.toast(`Copied ${v.rows.length} rows as CSV`); }
     catch { ui.toast("Could not reach the clipboard"); }
@@ -50,11 +58,19 @@ function Figure({ v, n, onDecide }: { v: View; n: number; onDecide: (keep: boole
         {v.draft
           ? <span className="row-btns"><button className="btn sm ink" onClick={() => onDecide(true)}>Keep</button><button className="btn sm plain" onClick={() => onDecide(false)}>Undo</button></span>
           : <span className="rp-acts">
-              <button onClick={() => setWide(!wide)}>{wide ? "Narrow" : "Expand"}</button>
-              <button onClick={() => setRowsOpen(!rowsOpen)} aria-expanded={rowsOpen}>Data</button>
-              <button onClick={copy}>Copy CSV</button>
+              {/* the two things most often wanted stay in view; the rest wait under ⋯ */}
               <button onClick={() => { ui.lab({ view: "saved", fig: v.spec.id }); ui.open("lab"); }} title="Open this figure in the data lab's Saved diagrams, where the lab assistant can explain it">Open in lab</button>
               <button onClick={() => askInChat(`About Figure ${n} (${v.spec.title}): `)}>Ask</button>
+              <span className="rp-more">
+                <button aria-haspopup="menu" aria-expanded={more} aria-label="More for this figure" onClick={() => setMore(!more)}>⋯</button>
+                {more && (
+                  <span className="rp-menu" role="menu">
+                    <button role="menuitem" onClick={() => { setWide(!wide); setMore(false); }}>{wide ? "Narrow" : "Expand"}</button>
+                    <button role="menuitem" onClick={() => { setRowsOpen(!rowsOpen); setMore(false); }}>{rowsOpen ? "Hide the data" : "Show the data"}</button>
+                    <button role="menuitem" onClick={() => { copy(); setMore(false); }}>Copy as CSV</button>
+                  </span>
+                )}
+              </span>
             </span>}
       </div>
       <ViewChart view={v} />
@@ -130,7 +146,7 @@ export function Report({ s }: { s: ExperimentState }) {
               <span className="row-btns"><button className="btn sm ink" onClick={() => decide(true)}>Keep</button><button className="btn sm plain" onClick={() => decide(false)}>Undo</button></span></div>
           )}
           <span className="kick">Results</span>
-          <h1>{rep.title || "No findings written yet"}</h1>
+          <h1>{rep.title || "Results"}</h1>
           <span className="byline">{s.title} · {s.snapshot.samples.length} files · numbers from saved tables</span>
         </header>
 

@@ -18,7 +18,8 @@ const size = (n: number) => (n > 1048576 ? `${(n / 1048576).toFixed(1)} MB` : n 
 function suggestions(s?: ExperimentState): string[] {
   if (!s) return [];
   const d = s.draft;
-  if (d) return [`Keep it`, `Undo that`, d.kind === "plan" ? "Why these steps?" : "Explain what this shows"];
+  // Keep and Undo are buttons on the waiting bar just above, so the chips only offer to explain
+  if (d) return [d.kind === "plan" ? "Why these steps?" : "Explain what this shows"];
   if (!s.plan.length) return ["Plan the analysis", "What is in these files?", "Show me the gates on the first sample"];
   const ran = new Set(s.runs.filter((r) => r.status === "done").map((r) => r.step));
   if (s.plan.some((p) => !ran.has(p.id))) return ["Run the plan", "Open the pipeline", "What does each step do?"];
@@ -129,7 +130,8 @@ export default function Chat({ exp }: { exp: string }) {
   const { data: state } = useExperiment(exp);
   const [text, setText] = useState("");
   const [files, setFiles] = useState<File[]>([]);
-  const [pending, setPending] = useState<{ text: string; attachments: string[]; live: Live } | null>(null);
+  const [pending, setPending] = useState<{ text: string; attachments: string[]; live: Live; base: number } | null>(null);
+  const sending = useRef(false);
   const [over, setOver] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -152,10 +154,12 @@ export default function Chat({ exp }: { exp: string }) {
 
   const send = async (raw: string) => {
     const words = raw.trim();
-    if ((!words && !files.length) || pending) return;
+    // a second click before the first has shown (a double click) must not send the ask twice
+    if ((!words && !files.length) || pending || sending.current) return;
+    sending.current = true;
     const attach = files;
     setText(""); setFiles([]);
-    setPending({ text: words, attachments: attach.map((f) => f.name), live: LIVE0 });
+    setPending({ text: words, attachments: attach.map((f) => f.name), live: LIVE0, base: msgs.length });
     try {
       let names: string[] = [];
       if (attach.length) names = (await api.upload(exp, attach)).saved.map((s) => s.name);
@@ -182,10 +186,24 @@ export default function Chat({ exp }: { exp: string }) {
       await refresh(qc, exp);
       ui.set({ agentBusy: null, planPreview: null });
       setPending(null);
+      sending.current = false;
     }
   };
   const sendNow = useRef(send);
   sendNow.current = send;
+  // K keeps and U undoes what is waiting, from anywhere on the screen but a text box
+  const keys = useRef<(keep: boolean) => void>(() => {});
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
+      const t = e.target as HTMLElement | null;
+      if (t?.closest?.("textarea,input,select,[contenteditable='true']")) return;
+      const k = e.key.toLowerCase();
+      if (k === "k" || k === "u") { e.preventDefault(); keys.current(k === "k"); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const decide = async (keep: boolean) => {
     try { keep ? await api.keep(exp) : await api.undo(exp); ui.toast(keep ? "Kept" : "Dropped"); }
@@ -195,6 +213,7 @@ export default function Chat({ exp }: { exp: string }) {
 
   const chips = useMemo(() => suggestions(state), [state]);
   const draft = state?.draft;
+  keys.current = (keep) => { if (draft && !pending) decide(keep); };
 
   return (
     <main className="ws-chat">
@@ -207,7 +226,8 @@ export default function Chat({ exp }: { exp: string }) {
               <p>Tell me what the experiment is for and I will plan the analysis. Everything I plan, run and draw appears on the right, and nothing changes until you keep it.</p>
             </div>
           )}
-          {msgs.map((m) => <Bubble key={m.id} m={m} exp={exp} />)}
+          {/* while a turn runs, its question shows once: as the pending bubble, not again from a refetch */}
+          {(pending ? msgs.slice(0, pending.base) : msgs).map((m) => <Bubble key={m.id} m={m} exp={exp} />)}
           {pending && <>
             <Bubble m={{ id: "p", t: "", role: "user", text: pending.text, attachments: pending.attachments }} />
             <LiveTurn live={pending.live} />
@@ -219,8 +239,8 @@ export default function Chat({ exp }: { exp: string }) {
           <div className="draft-bar" role="status">
             <span className="db-k">Waiting for you</span>
             <span className="db-s">{draft.summary}</span>
-            <button className="btn sm ink" onClick={() => decide(true)}>Keep</button>
-            <button className="btn sm plain" onClick={() => decide(false)}>Undo</button>
+            <button className="btn sm ink" onClick={() => decide(true)} title="Keep (K)">Keep<kbd>K</kbd></button>
+            <button className="btn sm plain" onClick={() => decide(false)} title="Undo (U)">Undo<kbd>U</kbd></button>
           </div>
         )}
         {!pending && <div className="suggest" id="chat-sug">{chips.map((c) => <button key={c} onClick={() => send(c)}>{c}</button>)}</div>}

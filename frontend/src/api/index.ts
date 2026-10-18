@@ -71,6 +71,8 @@ export type PlotData = {
   sample: string; x: number[]; y: number[]; label: number[];
   children: { key: string; name: string; source: string; dims: string[]; vertices: number[][] }[];
   parent: string | null; n_parent: number; n_shown: number; stage: string;
+  /** where round channel values sit on each axis, in display units: 0, 10², 10³... or 0, 50K, 100K... */
+  x_ticks?: { v: number; label: string }[]; y_ticks?: { v: number; label: string }[];
 };
 
 export type Memory = { id: string; text: string; kind: "definition" | "preference" | "lab" | "project"; quote: string;
@@ -194,8 +196,8 @@ export const api = {
   drawGate: (id: string, g: { name: string; parent: string | null; dims: string[]; vertices: number[][]; kind: string }) =>
     req<{ draft: Draft; gate: GateNode }>("POST", `/experiments/${id}/gates`, g),
   runStep: (id: string, step: string) => req<Run>("POST", `/experiments/${id}/steps/${encodeURIComponent(step)}/run`),
-  keep: (id: string) => req<{ kept: Draft }>("POST", `/experiments/${id}/keep`),
-  undo: (id: string) => req<{ dropped: Draft }>("POST", `/experiments/${id}/undo`),
+  keep: (id: string, gate?: string) => req<{ kept: Draft }>("POST", `/experiments/${id}/keep${gate ? `?gate=${encodeURIComponent(gate)}` : ""}`),
+  undo: (id: string, gate?: string) => req<{ dropped: Draft }>("POST", `/experiments/${id}/undo${gate ? `?gate=${encodeURIComponent(gate)}` : ""}`),
   messages: (id: string) => req<Message[]>("GET", `/experiments/${id}/messages`),
   chat: (id: string, text: string, attachments: string[] = []) => req<Message>("POST", `/experiments/${id}/chat`, { text, attachments }),
   chatStream: (id: string, text: string, attachments: string[], onEvent: (e: TurnEvent) => void) =>

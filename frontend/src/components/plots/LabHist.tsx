@@ -4,6 +4,7 @@
 // to keep and a new range gate is drawn.
 import { useRef, useState } from "react";
 import type { GateNode, PlotData } from "../../api";
+import { gateLabel } from "../../lib";
 
 const BINS = 96;
 const W = 600, PAD = { l: 44, r: 12, t: 14, b: 36 };
@@ -54,14 +55,20 @@ export default function LabHist({ data, xLabel, height = 380, gates = [], x, too
           <text className="tick" x={PAD.l - 6} y={Y(t) + 4} textAnchor="end">{t}%</text>
         </g>
       ))}
-      {[0.25, 0.5, 0.75].map((f) => <line key={f} className="grid" x1={PAD.l + f * pw} x2={PAD.l + f * pw} y1={PAD.t} y2={PAD.t + ph} />)}
+      {/* grid and values on the channel's round values (decades, or 0, 50K, 100K...) */}
+      {(data.x_ticks?.length ? data.x_ticks : [0.25, 0.5, 0.75].map((v) => ({ v, label: "" }))).map((t) => (
+        <g key={t.v}>
+          {t.v > 0.005 && t.v < 0.995 && <line className="grid" x1={X(t.v)} x2={X(t.v)} y1={PAD.t} y2={PAD.t + ph} />}
+          {t.label && <text className="tick" x={X(t.v)} y={PAD.t + ph + 14} textAnchor="middle">{t.label}</text>}
+        </g>
+      ))}
       {ranges.map((g) => {
         const [lo, hi] = [Math.min(g.vertices[0][0], g.vertices[1][0]), Math.max(g.vertices[0][0], g.vertices[1][0])];
         const on = g.key === selected;
         return (
           <g key={g.key} className={`h-range${on ? " on" : ""}${g.draft ? " draft" : ""}`} onClick={() => onSelect?.(g.key)}>
             <rect x={X(lo)} y={PAD.t} width={X(hi) - X(lo)} height={ph} />
-            <text x={(X(lo) + X(hi)) / 2} y={PAD.t + 13} textAnchor="middle">{g.name} · {g.pct_parent.toFixed(1)}%</text>
+            <text x={(X(lo) + X(hi)) / 2} y={PAD.t + 13} textAnchor="middle">{gateLabel(g.name)} · {g.pct_parent.toFixed(1)}%</text>
           </g>
         );
       })}

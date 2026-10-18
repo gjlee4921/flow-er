@@ -172,6 +172,58 @@ def undo(exp_id: str, who: str = "scientist") -> dict | None:
     return d
 
 
+def _split_gates(exp_id: str, key: str, take_parents: bool) -> tuple[dict, list, list] | None:
+    """A gate draft of several gates parted in two: the gate named, with the draft gates above it
+    (to keep it, its parents must be kept too) or below it (to undo it, its children go too), and
+    the rest, which stay waiting."""
+    d = draft(exp_id)
+    if not d or d["kind"] != "gate":
+        return None
+    items = d["payload"] if isinstance(d["payload"], list) else [d["payload"]]
+    by_key = {g["key"]: g for g in items}
+    if key not in by_key:
+        return None
+    if take_parents:
+        part, k = set(), key
+        while k in by_key:
+            part.add(k)
+            k = by_key[k].get("parent")
+    else:
+        part = {g["key"] for g in items if g["key"] == key or g["key"].startswith(key + "/")}
+    return d, [g for g in items if g["key"] in part], [g for g in items if g["key"] not in part]
+
+
+def _leave(exp_id: str, d: dict, rest: list) -> None:
+    if rest:
+        _write(_dir(exp_id) / "draft.json", {**d, "payload": rest, "summary": f"{len(rest)} gate{'s' if len(rest) > 1 else ''} still waiting"})
+    else:
+        (_dir(exp_id) / "draft.json").unlink(missing_ok=True)
+
+
+def keep_gate(exp_id: str, key: str, who: str = "scientist") -> dict | None:
+    """Keep one gate of a gate draft (with the draft gates above it); the others keep waiting."""
+    parts = _split_gates(exp_id, key, take_parents=True)
+    if not parts:
+        return None
+    d, kept, rest = parts
+    keys = {g["key"] for g in kept}
+    set_state(exp_id, "gates", [g for g in state(exp_id, "gates") if g["key"] not in keys] + kept)
+    _leave(exp_id, d, rest)
+    journal(exp_id, "keep", {"kind": "gate", "summary": f"kept {key.split('/')[-1]}" + (f" and {len(kept) - 1} gate(s) above it" if len(kept) > 1 else ""), "who": who})
+    return {**d, "payload": kept}
+
+
+def undo_gate(exp_id: str, key: str, who: str = "scientist") -> dict | None:
+    """Drop one gate of a gate draft (with the draft gates below it); the others keep waiting."""
+    parts = _split_gates(exp_id, key, take_parents=False)
+    if not parts:
+        return None
+    d, dropped, rest = parts
+    _leave(exp_id, d, rest)
+    journal(exp_id, "undo", {"kind": "gate", "summary": f"dropped {key.split('/')[-1]}" + (f" and {len(dropped) - 1} gate(s) below it" if len(dropped) > 1 else ""), "who": who})
+    return {**d, "payload": dropped}
+
+
 # ---- journal and chat --------------------------------------------------------------------
 
 def journal(exp_id: str, event: str, data: dict) -> None:

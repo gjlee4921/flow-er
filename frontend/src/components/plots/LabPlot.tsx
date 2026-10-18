@@ -3,7 +3,7 @@
 // the same space FlowJo stores gate vertices in, so gates sit exactly where they were drawn.
 import { useEffect, useRef, useState } from "react";
 import type { GateNode, PlotData } from "../../api";
-import { css, POP } from "../../lib";
+import { css, gateLabel, POP } from "../../lib";
 
 type Props = {
   data?: PlotData;
@@ -19,7 +19,7 @@ type Props = {
   busy?: boolean;
 };
 
-const PAD = { l: 44, r: 12, t: 12, b: 36 };
+const PAD = { l: 52, r: 12, t: 12, b: 40 };
 const DENS = [[214, 228, 246], [146, 184, 232], [74, 134, 214], [36, 92, 186], [122, 86, 170], [214, 120, 58], [228, 92, 40]];
 export function densCol(u: number) {
   const t = Math.pow(Math.max(0, Math.min(1, u)), 0.55) * (DENS.length - 1);
@@ -131,12 +131,15 @@ export default function LabPlot(p: Props) {
     const ctx = cv.getContext("2d")!;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = css("--plot") || "#fff"; ctx.fillRect(0, 0, w, h);
-    ctx.strokeStyle = css("--sep"); ctx.lineWidth = 1;
-    for (let i = 1; i < 4; i++) {
-      ctx.beginPath(); ctx.moveTo(X(i / 4), PAD.t); ctx.lineTo(X(i / 4), PAD.t + ph);
-      ctx.moveTo(PAD.l, Y(i / 4)); ctx.lineTo(PAD.l + pw, Y(i / 4)); ctx.stroke();
-    }
+    // grid lines on the axis ticks (decades, or round scatter values), else quarters
     const d = p.data;
+    const xt = d?.x_ticks?.length ? d.x_ticks.map((t) => t.v) : [0.25, 0.5, 0.75];
+    const yt = d?.y_ticks?.length ? d.y_ticks.map((t) => t.v) : [0.25, 0.5, 0.75];
+    ctx.strokeStyle = css("--sep"); ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (const v of xt) if (v > 0.005 && v < 0.995) { ctx.moveTo(X(v), PAD.t); ctx.lineTo(X(v), PAD.t + ph); }
+    for (const v of yt) if (v > 0.005 && v < 0.995) { ctx.moveTo(PAD.l, Y(v)); ctx.lineTo(PAD.l + pw, Y(v)); }
+    ctx.stroke();
     if (d && d.x.length) {
       if (p.mode === "contour" && p.stage !== "labels") {
         // the events faintly behind, then the lines from the outermost (98%) to the densest (50%)
@@ -173,12 +176,13 @@ export default function LabPlot(p: Props) {
       if (!v) return;
       const on = g.key === p.selected;
       ctx.beginPath(); v.forEach(([a, b], k) => (k ? ctx.lineTo(X(a), Y(b)) : ctx.moveTo(X(a), Y(b)))); ctx.closePath();
-      ctx.fillStyle = on ? "rgba(0,113,227,.08)" : "transparent"; ctx.fill();
-      ctx.strokeStyle = g.draft ? css("--c-flag") : on ? css("--c-trt") : (p.stage === "labels" ? POP[i % POP.length] : css("--text-2"));
+      // the picked gate wears the same flower pink as its row in the tree; drafts stay orange and dashed
+      ctx.fillStyle = on ? "rgba(215,127,156,.10)" : "transparent"; ctx.fill();
+      ctx.strokeStyle = g.draft ? css("--c-flag") : on ? css("--fl-core") : (p.stage === "labels" ? POP[i % POP.length] : css("--text-2"));
       ctx.lineWidth = on ? 2 : 1.3; ctx.setLineDash(g.draft ? [5, 4] : []); ctx.stroke(); ctx.setLineDash([]);
       const top = v.reduce((m, q) => (q[1] > m[1] ? q : m), v[0]);
       ctx.fillStyle = ctx.strokeStyle as string; ctx.font = `600 11px ${css("--font")}`; ctx.textAlign = "left";
-      ctx.fillText(`${g.name} · ${g.pct_parent.toFixed(1)}%`, Math.min(X(top[0]), PAD.l + pw - 110), Math.max(PAD.t + 11, Y(top[1]) - 5));
+      ctx.fillText(`${gateLabel(g.name)} · ${g.pct_parent.toFixed(1)}%`, Math.min(X(top[0]), PAD.l + pw - 110), Math.max(PAD.t + 11, Y(top[1]) - 5));
     });
     // a quadrant being placed: a crosshair through the pointer
     if (p.tool === "quadrant" && hover) {
@@ -194,8 +198,19 @@ export default function LabPlot(p: Props) {
       ctx.stroke(); ctx.setLineDash([]);
     }
     ctx.strokeStyle = css("--sep-2"); ctx.strokeRect(PAD.l + 0.5, PAD.t + 0.5, pw - 1, ph - 1);
-    ctx.fillStyle = css("--text-3"); ctx.font = `11px ${css("--font")}`; ctx.textAlign = "center";
-    ctx.fillText(p.xLabel, PAD.l + pw / 2, h - 10);
+    // tick marks and their values outside the frame
+    ctx.fillStyle = css("--text-3"); ctx.font = `10.5px ${css("--font")}`;
+    ctx.beginPath();
+    for (const t of d?.x_ticks ?? []) { ctx.moveTo(X(t.v), PAD.t + ph); ctx.lineTo(X(t.v), PAD.t + ph + 4); }
+    for (const t of d?.y_ticks ?? []) { ctx.moveTo(PAD.l - 4, Y(t.v)); ctx.lineTo(PAD.l, Y(t.v)); }
+    ctx.stroke();
+    ctx.textAlign = "center"; ctx.textBaseline = "top";
+    for (const t of d?.x_ticks ?? []) ctx.fillText(t.label, X(t.v), PAD.t + ph + 6);
+    ctx.textAlign = "right"; ctx.textBaseline = "middle";
+    for (const t of d?.y_ticks ?? []) ctx.fillText(t.label, PAD.l - 7, Y(t.v));
+    ctx.textBaseline = "alphabetic";
+    ctx.font = `11px ${css("--font")}`; ctx.textAlign = "center";
+    ctx.fillText(p.xLabel, PAD.l + pw / 2, h - 6);
     ctx.save(); ctx.translate(14, PAD.t + ph / 2); ctx.rotate(-Math.PI / 2); ctx.fillText(p.yLabel, 0, 0); ctx.restore();
   });
 
