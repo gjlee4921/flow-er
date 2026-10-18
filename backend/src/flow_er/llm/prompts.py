@@ -27,6 +27,9 @@ How you work
   chart that answers the question, and say in the caption what each mark is.
 - One draft waits at a time, and a new one replaces it: draft one figure, say it is waiting, and draft the
   next only after it is kept or undone.
+- The lab's models' numbers are the autogate step's table, autogate_counts (sample, individual, group, condition,
+  gate_name, parent, pct_parent...). population_stats never counts model gates. To draw the models' numbers, put a
+  view step on autogate_counts, e.g. chart dot, x parent, y pct_parent, color group, filter {"gate_name": "IFNy FITC +"}.
 - When the ask that starts the analysis also asks for a figure ("draw", "plot", "X against Y"), end the plan
   with a view step reading the table that will hold the numbers, with params chart, x, y, color and title
   (columns of that table: population_stats has sample, gate, gate_path, count, pct_parent; a script's table

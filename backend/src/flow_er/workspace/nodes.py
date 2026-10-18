@@ -30,10 +30,12 @@ NODE_TYPES: dict[str, dict] = {
     "train_gate_model": {"name": "Train a gate model", "kind": "model", "takes": ["labels", "events", "samples", "gates"], "makes": "model", "version": "1",
                          "about": "Retrain the lab's gate models on the gates the scientist kept (flow_er.ml); a new version is used only if it is better."},
     "autogate": {"name": "Gate with the lab's models", "kind": "model", "takes": ["samples", "events", "labels", "gates"], "makes": "table",
-                 "version": "1", "reads_models": True,
-                 "about": "Gate every file with the lab's trained models (a per-gate U-Net, else the lab's template): per gate the count, "
-                          "% of parent, which model answered and how sure it was, and FlowJo's % and an F1 where FlowJo gates exist. "
-                          "The model gates are drafts the scientist reviews and keeps in the data lab.",
+                 "version": "2", "reads_models": True,
+                 "about": "Gate every file with the lab's trained models (a per-gate U-Net, else the lab's template). Its table, "
+                          "autogate_counts, has per file and gate: sample, individual, group (e.g. ALS or HC), condition (e.g. "
+                          "Negative or Peptide), gate, gate_name, parent, count, pct_parent, model, confidence, low_confidence, and "
+                          "FlowJo's % and an F1 where FlowJo gates exist. These are the models' numbers (population_stats counts "
+                          "FlowJo's or the scientist's gates, not the models'). The model gates are drafts reviewed in the data lab.",
                  "columns": {"sample": "the FCS file name", "gate": "the gate's full path", "model": "which model answered (or template_copy)",
                              "confidence": "how sure the model was near the gate's edge, 0-1 (blank for template copies)",
                              "low_confidence": "true when the gate should be reviewed", "count": "events in the gate",
@@ -55,6 +57,7 @@ NODE_TYPES: dict[str, dict] = {
              "params": {"chart": {"label": "Chart", "enum": [None, "bar", "dot", "dumbbell", "line", "scatter", "heatmap", "table"], "default": None},
                         "x": {"label": "Across (a column)"}, "y": {"label": "Value (a column)"}, "color": {"label": "Colour by (a column)"},
                         "title": {"label": "Title"}, "y_label": {"label": "Value label"},
+                        "filter": {"label": "Only rows where (column: value or [values])"},
                         "agg": {"label": "Combine rows", "enum": ["none", "mean", "sum", "max", "min"], "default": "none"}}},
 }
 
@@ -160,7 +163,8 @@ def _draw(exp_id: str, step: dict) -> dict:
     inp = (step.get("inputs") or [None])[0]
     table = inp if inp and store.path(exp_id, "tables", f"{inp}.csv").exists() else script_inputs(exp_id, step)[0].get(inp)
     spec = {"title": p.get("title") or step.get("title"), "type": p["chart"], "table": table, "x": p.get("x"), "y": p["y"],
-            "color": p.get("color"), "agg": p.get("agg") or "none", "y_label": p.get("y_label"), "caption": step.get("why") or ""}
+            "color": p.get("color"), "agg": p.get("agg") or "none", "y_label": p.get("y_label"), "filter": p.get("filter") or {},
+            "caption": step.get("why") or ""}
     try:
         v = views.validate(exp_id, spec)
     except ValueError as e:

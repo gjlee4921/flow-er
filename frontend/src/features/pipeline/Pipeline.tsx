@@ -112,11 +112,22 @@ function Canvas({ s }: { s: ExperimentState }) {
     // card saying how to get one; figures are not plan steps, so nothing else would put them here
     const draftView = s.draft?.kind === "view" ? (s.draft.payload as ViewSpec) : null;
     const figs = [...s.views.filter((v) => v.id !== draftView?.id), ...(draftView ? [draftView] : [])];
-    const figCards: Card[] = figs.map((v, i) => ({
-      id: `fig:${v.id}`, kind: "view", title: v.title, sub: `Figure ${i + 1} · ${v.type === "table" ? "table" : `${v.type} chart`}`,
+    const what = (v: ViewSpec, i: number) => `Figure ${i + 1} · ${v.type === "table" ? "table" : `${v.type} chart`}`;
+    // a figure step that drew its figure stands for it: one card, dashed while the figure waits for Keep
+    const drawnBy = new Map<string, number>();
+    for (const c of stepCards) {
+      if (c.step?.op !== "view") continue;
+      const i = figs.findIndex((v) => v.title === (c.step!.params?.title ?? c.title) || v.title === c.title);
+      if (i < 0) continue;
+      drawnBy.set(figs[i].id, i);
+      c.sub = what(figs[i], i);
+      if (figs[i] === draftView) c.status = "draft";
+    }
+    const figCards: Card[] = figs.flatMap((v, i) => drawnBy.has(v.id) ? [] : [{
+      id: `fig:${v.id}`, kind: "view", title: v.title, sub: what(v, i),
       status: v === draftView ? "draft" : "done", outputs: [], inputs: [v.table], fig: true,
-    }));
-    if (!figCards.length && steps.length && !building)
+    }]);
+    if (!figs.length && !stepCards.some((c) => c.step?.op === "view") && steps.length && !building)
       figCards.push({ id: "fig:none", kind: "view", title: "No figures yet", sub: "Ask for a figure or a write-up in the chat", status: "planned", outputs: [], inputs: [], fig: true });
     return src.concat(stepCards, figCards);
   }, [s, steps, draftPlan, building, lastRun, kept]); // eslint-disable-line react-hooks/exhaustive-deps

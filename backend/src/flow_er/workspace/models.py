@@ -241,14 +241,20 @@ def table(exp_id: str, samples: list[str] | None = None) -> list[dict]:
                 body = autogate(exp_id, sid)
                 st["fresh"].append(sid)
             st["done"].append(sid)
-            rows += _rows(sid, body)
+            rows += _rows(sid, body, samplemeta.of(exp_id, sid))
     finally:
         st["running"], st["current"], st["finished"] = False, None, store.now()
     return rows
 
 
-def _rows(sid: str, body: dict) -> list[dict]:
-    return [{"sample": sid, "gate": g["gate"], "model": g["model"],
+def _rows(sid: str, body: dict, meta: dict | None = None) -> list[dict]:
+    """The table's rows for one file: who it came from (individual, the group their label starts with,
+    the condition) beside each gate's numbers, so a figure can set ALS against HC straight from it."""
+    meta = meta or {}
+    ind = meta.get("individual") or ""
+    grp = m.group(1) if (m := re.match(r"^([A-Za-z]+)-\d+$", ind)) else ""
+    return [{"sample": sid, "individual": ind, "group": grp, "condition": meta.get("condition") or "",
+             "gate": g["gate"], "gate_name": g["gate"].split("/")[-1], "parent": (g.get("parent") or "").split("/")[-1], "model": g["model"],
              "confidence": g["confidence"] if g["confidence"] is not None else "",
              "low_confidence": bool(g["low_confidence"]), "count": g["count"], "pct_parent": g["percent_of_parent"],
              "flowjo_pct": g.get("flowjo_pct", ""), "f1": g.get("f1", "")} for g in body["gates"]]
