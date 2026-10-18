@@ -10,15 +10,16 @@ from __future__ import annotations
 
 import csv
 
-from flow_er.workspace import lab, models, store
+from flow_er.workspace import lab, models, scripts, store
 
 SOURCES = {"fcs": "samples", "wsp": "gates", "uploads": "file"}  # inputs that exist before any step runs
 
 NODE_TYPES: dict[str, dict] = {
-    "compensate": {"name": "Compensate and transform", "kind": "macro", "takes": ["samples"], "makes": "events", "version": "1",
-                   "about": "Apply the spillover matrix and the display transforms (FlowKit)."},
-    "custom_macro": {"name": "Script", "kind": "macro", "takes": ["*"], "makes": "*", "version": "1",
-                     "about": "A script the agent wrote for a step no built-in op covers."},
+    # the FlowJo workspace (a "gates" source) also carries the spillover matrix and the transforms
+    "compensate": {"name": "Compensate and transform", "kind": "macro", "takes": ["samples", "gates"], "makes": "events", "version": "1",
+                   "about": "Apply the spillover matrix and the display transforms (FlowKit), from the FlowJo workspace when there is one."},
+    "custom_macro": {"name": "Script", "kind": "macro", "takes": ["samples", "events", "table", "derived events"], "makes": "*", "version": "3",
+                     "about": "A script for a step no built-in op covers, written or adapted by the agent, tested and run in the sandbox."},
     "gate_from_workspace": {"name": "Apply the FlowJo gates", "kind": "model", "takes": ["events", "samples", "gates"], "makes": "labels", "version": "1",
                             "about": "Use the gates in the lab's FlowJo workspace as the labels."},
     "train_gate_model": {"name": "Train a gate model", "kind": "model", "takes": ["labels", "events", "samples", "gates"], "makes": "model", "version": "1",
@@ -54,11 +55,17 @@ def makes(op: str) -> str:
 
 
 def port_type(name: str, steps: list[dict]) -> str:
-    """What a named input is: a source's type, or the type the step that makes it produces."""
+    """What a named input is: a source's type, or the type the step that makes it produces. A script's
+    outputs are typed by its OUTPUTS; events a script returns are "derived events", which only other
+    scripts read (the built-in steps read the files themselves, so they would not see the change)."""
     if name in SOURCES:
         return SOURCES[name]
     for s in steps:
         if name in s.get("outputs", []):
+            if s.get("op") == "custom_macro" and s.get("script"):
+                outs = scripts.check(s["script"].get("code", "")).get("outputs") or {}
+                kind = dict(zip(s["outputs"], outs.values())).get(name)
+                return "derived events" if kind == "events" else kind or "*"
             return makes(s.get("op", ""))
     return "*"
 
@@ -88,7 +95,23 @@ def run(exp_id: str, step: dict, samples: list[str] | None = None) -> dict:
     if op == "export_prism":
         return _prism(exp_id, (step.get("params") or {}).get("value", "pct_parent"))
     if op == "custom_macro":
-        return {"status": "blocked", "summary": "Written scripts are saved but not run yet: running them needs the sandbox."}
+        if not step.get("script"):
+            return {"status": "blocked", "summary": "This script step has no script yet."}
+        # each input that is a table: the table its step saved when it last ran
+        plan_steps = store.state(exp_id, "plan")
+        made_by = {o: s["id"] for s in plan_steps for o in s.get("outputs", [])}
+        last = {r["step"]: r for r in store.state(exp_id, "runs")}
+        table_for = {i: last.get(made_by.get(i, ""), {}).get("table") for i in step.get("inputs", [])}
+        by_id = {s["id"]: s for s in plan_steps}
+        events_from = {}  # inputs that are another script's events: the folder it left them in
+        for i in step.get("inputs", []):
+            src = by_id.get(made_by.get(i, ""))
+            if src and src.get("op") == "custom_macro" and src.get("script"):
+                outs = list(scripts.check(src["script"]["code"]).get("outputs") or {})
+                port = dict(zip(src["outputs"], outs)).get(i)
+                if port:
+                    events_from[i] = store.path(exp_id, "derived", src["id"], port)
+        return scripts.run_step(exp_id, step, step["script"], table_for, samples, events_from)
     if op == "view":
         return {"status": "done", "summary": "Figures draw themselves from their table."}
     return {"status": "failed", "summary": f"No step of kind {op}."}
