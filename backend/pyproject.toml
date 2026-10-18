@@ -2,7 +2,6 @@
 name = "flow-er"
 version = "0.1.0"
 description = "Flow cytometry gating that learns each lab's gates from its own data"
-readme = "../README.md"
 license = "MIT"
 requires-python = ">=3.11,<3.14"
 dependencies = [
@@ -16,6 +15,8 @@ dependencies = [
     "torch>=2.4",
     "segmentation-models-pytorch>=0.3.4",
     "anthropic>=0.40",
+    "openai>=1.50",
+    "python-multipart>=0.0.9",
     "mcp>=1.2",
 ]
 
