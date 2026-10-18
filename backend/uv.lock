@@ -465,24 +465,23 @@ name = "flow-er"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "flowkit" },
-    { name = "matplotlib" },
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
-    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
-    { name = "pandas" },
-    { name = "pydantic-settings" },
-    { name = "scikit-image" },
-]
-
-[package.dev-dependencies]
-api = [
     { name = "anthropic" },
     { name = "fastapi" },
+    { name = "flowkit" },
+    { name = "matplotlib" },
     { name = "mcp" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "openai" },
+    { name = "pandas" },
     { name = "pydantic-settings" },
+    { name = "python-multipart" },
+    { name = "scikit-image" },
     { name = "sqlmodel" },
     { name = "uvicorn", extra = ["standard"] },
 ]
+
+[package.dev-dependencies]
 dev = [
     { name = "pytest" },
     { name = "ruff" },
@@ -494,23 +493,22 @@ ml = [
 
 [package.metadata]
 requires-dist = [
-    { name = "flowkit", specifier = ">=1.2" },
-    { name = "matplotlib", specifier = ">=3.9" },
-    { name = "numpy", specifier = ">=1.26" },
-    { name = "pandas", specifier = ">=2.2" },
-    { name = "pydantic-settings", specifier = ">=2.16.0" },
-    { name = "scikit-image", specifier = ">=0.24" },
-]
-
-[package.metadata.requires-dev]
-api = [
     { name = "anthropic", specifier = ">=0.40" },
     { name = "fastapi", specifier = ">=0.115" },
+    { name = "flowkit", specifier = ">=1.2" },
+    { name = "matplotlib", specifier = ">=3.9" },
     { name = "mcp", specifier = ">=1.2" },
-    { name = "pydantic-settings", specifier = ">=2.4" },
+    { name = "numpy", specifier = ">=1.26" },
+    { name = "openai", specifier = ">=1.50" },
+    { name = "pandas", specifier = ">=2.2" },
+    { name = "pydantic-settings", specifier = ">=2.16.0" },
+    { name = "python-multipart", specifier = ">=0.0.9" },
+    { name = "scikit-image", specifier = ">=0.24" },
     { name = "sqlmodel", specifier = ">=0.0.22" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
 ]
+
+[package.metadata.requires-dev]
 dev = [
     { name = "pytest", specifier = ">=8" },
     { name = "ruff", specifier = ">=0.6" },
@@ -1456,6 +1454,23 @@ source = { registry = "https://pypi.org/simple" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c2/f3/d86c845465a2723ad7e1e5c36dcd75ddb82898b3f53be47ebd429fb2fa5d/nvidia_nvtx-13.0.85-py3-none-manylinux1_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:4936d1d6780fbe68db454f5e72a42ff64d1fd6397df9f363ae786930fd5c1cd4", size = 148047, upload-time = "2025-09-04T08:29:01.761Z" },
     { url = "https://files.pythonhosted.org/packages/a8/64/3708a90d1ebe202ffdeb7185f878a3c84d15c2b2c31858da2ce0583e2def/nvidia_nvtx-13.0.85-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:cb7780edb6b14107373c835bf8b72e7a178bac7367e23da7acb108f973f157a6", size = 148878, upload-time = "2025-09-04T08:28:53.627Z" },
+]
+
+[[package]]
+name = "openai"
+version = "3.33.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+    { name = "httpx2" },
+    { name = "jiter" },
+    { name = "pydantic" },
+    { name = "sniffio" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/34/8d/ff5a4348116f667d04c90c12104028de2d5dc31e7bacfb9b18fcc8a7f0d1/openai-3.33.0.tar.gz", hash = "sha256:1865f5ce6a5c2f28a926303cb97f2489dba5ee7c7b7a45910d48466c10a187c4", size = 2230912, upload-time = "2026-10-17T00:30:21.045Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/af/af/afcdd2ddb36b1e015e72ae4150e70f5bd5e1655ac9aea77444f5cd23aab5/openai-3.33.0-py3-none-any.whl", hash = "sha256:a29d04e07dabcd9c94362e6339eb243c1181fd73d2d0432e1ff885a520b71664", size = 2258124, upload-time = "2026-10-17T00:30:18.691Z" },
 ]
 
 [[package]]

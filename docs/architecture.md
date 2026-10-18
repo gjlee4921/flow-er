@@ -1,6 +1,6 @@
 # Architecture
 
-Full product description: the flow-er PRD (Confluence, "Reinvent the wheel" page). App plan: [spec-plan.md](spec-plan.md). Models and runtime: [models.md](models.md).
+Full product description: the flow-er PRD (Confluence, "Reinvent the wheel" page). The agent's design: the flow-er agent tech spec (a child page of the PRD). App plan: [spec-plan.md](spec-plan.md). Models and runtime: [models.md](models.md).
 
 - **backend/**: FastAPI app (`src/flow_er/main.py`) plus a separate worker process for training and inference.
   - `cytometry/`: FCS and FlowJo workspaces.
@@ -17,12 +17,25 @@ Full product description: the flow-er PRD (Confluence, "Reinvent the wheel" page
     - A new version only becomes current when it beats the current one (template copy, for a new lab) on held-out individuals, and no gate gets worse by more than 1 pp.
     - `unet/` holds the U-Nets: model, dataset, training, inference, polygons.
     - `baseline.py`, `evaluate.py`, `splits.py` and `cache.py` serve the research evaluation.
+  - `workspace/` is the tool layer: one folder per experiment (`WORKSPACE_DIR`) holding its plan, gates, views, macros, saved tables, journal and chat. Every change is a draft until kept.
+    - `data.py` reads a dataset (FlowKit for now; it can switch to `cytometry/`, which now has the loaders).
+    - `lab.py` gives the gate tree with counts, events to draw, and the population table.
+    - `plan.py` validates plans and runs their steps; `views.py` validates figure specs and resolves their rows from a saved table.
+    - `models.py` is the seam to `ml/`: it reports what the gating models can do and is where training and inference get wired (calls: [models.md §5](models.md#5-mapping-to-the-calls-proposed-in-spec-plan-2)).
+  - `llm/` is the agent:
+    - `client.py`: the provider adapter (OpenAI Responses API).
+    - `tools.py`: the tool registry.
+    - `prompts.py`: the prompts.
+    - `agent.py`: the turn loop and subagents.
+    - The data lab has its own assistant on the same loop: its own thread (`lab_chat.jsonl`), its own prompt, and only the tools that move the lab and read numbers (`LAB_TOOLS`), so it cannot change the analysis.
+  - `mcp/server.py` serves the same tools over MCP.
   - `scripts/`: research and ops command lines.
     - `inspect_wsp.py`, `build_registry.py`: inspect the data and build the dataset registry.
     - `build_dataset.py`: build the cache.
     - `run_baselines.py`, `train_gate.py`, `report.py`: baselines, training and reports.
     - `autogate.py`: the runtime from the command line.
-- **frontend/**: React + TypeScript (Vite). The API client's types are generated from the backend's OpenAPI schema. The app and agent are on `feat/web-agent` (see spec-plan.md).
+- **frontend/**: React + TypeScript (Vite). The chat is in the middle, the plan in the sidebar, and the workflow panel on the right shows the pipeline, results, measurements and models. The data lab takes the whole screen, with a plot, a stats sheet, saved diagrams and its own assistant. The API client is hand-typed for now; `pnpm gen:api` can generate it from the backend's OpenAPI schema.
 - **Outside the repo**:
   - **Data** (`DATA_DIR`, default `../data`): the datasets (FCS + FlowJo workspaces), `_splits/` (dataset registry and frozen split; they name donors, so never in git), `_cache/v1/` (model inputs, [cache-format.md](cache-format.md)) and `_results/`.
   - **Models** (`MODELS_DIR`, default `../models`): `base/shared/`, `labs/<lab>/<version>/`, and the research runs.
+  - **Workspaces** (`WORKSPACE_DIR`, default `../workspaces`): one folder per experiment.

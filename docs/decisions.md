@@ -6,6 +6,11 @@
 | Splits by mouse/donor (and date), never by cell | Cells from the same animal in train and test inflate scores |
 | Data and trained models kept outside git | Size, and donor data must never be published |
 | Package name `flow_er` | `flower` is an existing PyPI package (Celery's monitor) |
+| Every change the agent makes is a draft until kept | Nothing in an analysis changes without the scientist seeing it; undo is always one click |
+| The agent never places gates or produces numbers | Gates come from FlowJo, the scientist or the models; numbers come from saved tables, so every figure traces to a file |
+| Figures are specs over saved tables, drawn by the browser | A new way of showing a result can be asked for in a sentence without running generated code, and stays interactive |
+| The web app's agent runs on OpenAI's Responses API with `store=False` | Function tools with reasoning models need it; nothing is kept on OpenAI's side. The adapter is one function, so Claude can replace it |
+| The data lab has its own assistant, apart from the main chat | Looking and laying out is a different job from planning: a separate thread keeps both short, and lab-only tools mean it can never change the analysis |
 | Response baseline = the well named in meta `unstim_source`, same method and gate; no response when that well's prediction is missing | Exact donor pairing from the cache; never mixes methods |
 | Frequencies and errors are computed on the cached parent cells (the 200k subsample when a parent is larger); precision/recall are NaN when their denominator is 0 | Same cells the models are scored on; ALS keeps every cell |
 | U-Net input normalisation: log1p(count) / max of the image, per channel (density and unstim alike); template stays 0/1; no ImageNet mean/std for the pretrained encoder | Spec only says "count image"; scale-free across event counts; one rule for every model, stored in each recipe |

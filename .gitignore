@@ -235,3 +235,8 @@ models/
 *.pth
 # The Python template ignores lib/; the frontend keeps shared code there
 !frontend/src/lib/
+
+# The local e2e suite, adapted from the Darling repo's tests/suite. Kept out of git on purpose.
+e2e-darling/
+# Experiment workspaces, if WORKSPACE_DIR is ever pointed inside the repo
+workspaces/

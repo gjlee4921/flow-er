@@ -5,29 +5,31 @@ description = "Flow cytometry gating that learns each lab's gates from its own d
 license = "MIT"
 requires-python = ">=3.11,<3.14"
 dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic-settings>=2.16.0",
+    "sqlmodel>=0.0.22",
     "flowkit>=1.2",
     "numpy>=1.26",
     "pandas>=2.2",
     "matplotlib>=3.9",
     "scikit-image>=0.24",
-    "pydantic-settings>=2.16.0",
+    "anthropic>=0.40",
+    "openai>=1.50",
+    "python-multipart>=0.0.9",
+    "mcp>=1.2",
 ]
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.6"]
-# Installed in stages to keep the environment small: `uv sync --group ml`, `uv sync --group api`.
+# The gating models (PyTorch). Installed by default; `uv sync --no-group ml` skips them.
 ml = [
     "torch>=2.4",
     "segmentation-models-pytorch>=0.3.4",
 ]
-api = [
-    "fastapi>=0.115",
-    "uvicorn[standard]>=0.30",
-    "pydantic-settings>=2.4",
-    "sqlmodel>=0.0.22",
-    "anthropic>=0.40",
-    "mcp>=1.2",
-]
+
+[tool.uv]
+default-groups = ["dev", "ml"]
 
 [build-system]
 requires = ["hatchling"]
