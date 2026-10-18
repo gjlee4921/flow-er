@@ -38,9 +38,12 @@ def _final(text: str) -> dict:
 
 
 def write(goal: str, inputs: dict[str, str], channels: list[str], rounds: int = 12,
-          on_progress: Callable[[str], None] | None = None) -> dict:
-    """A tested script for `goal`, reading `inputs` (port -> events or table). Returns the code, its
-    provenance, the fixture and test result, and a title and summary; or {"refused": why}."""
+          on_progress: Callable[[str], None] | None = None, tables: dict | None = None,
+          real: Callable[[str, dict], str | None] | None = None) -> dict:
+    """A tested script for `goal`, reading `inputs` (port -> events or table). `tables` describes each
+    table input (its columns, and example rows when it exists); `real(code, params)` runs the script on
+    the real inputs and says what stopped it, if anything. Returns the code, its provenance, the fixture
+    and test result, and a title and summary; or {"refused": why}."""
     st: dict = {"code": None, "check": None, "test": None, "fixture": None, "fetched": []}
 
     def fetch_source(ref: str, lines: str | None = None) -> dict:
@@ -67,12 +70,21 @@ def write(goal: str, inputs: dict[str, str], channels: list[str], rounds: int = 
             return {"passed": False, "problems": st["check"]["problems"]}
         st["fixture"] = fixture
         st["test"] = scripts.test(st["code"], fixture)
+        if st["test"]["passed"] and real:
+            # the fixture is the writer's idea of the input; the real files and tables have the last word
+            params = {**st["check"].get("params", {}), **(fixture.get("params") or {})}
+            if why := real(st["code"], params):
+                why = (f"it passes the fixture but stops on the real data: {why}. Make the fixture look "
+                       "like the real input (see tables in the task) and fix the script.")
+                st["test"] = {**st["test"], "passed": False, "problems": [why]}
+            else:
+                st["test"] = {**st["test"], "real_data": "ran on the real inputs"}
         return st["test"]
 
     handlers = {"fetch_source": fetch_source, "write_script": write_script, "test_script": test_script}
     say = on_progress or (lambda _text: None)
     say("Looking for reference code")
-    task = {"goal": goal, "inputs": inputs, "channels": channels}
+    task = {"goal": goal, "inputs": inputs, "channels": channels, **({"tables": tables} if tables else {})}
     items: list[dict] = [{"role": "user", "content": json.dumps(task)}]
     for _ in range(rounds):
         r = client.respond(prompts.SCRIPT_WRITER, items, SCHEMAS)
@@ -115,7 +127,9 @@ def _progress(tool: str, res: dict) -> str:
     if tool == "write_script":
         return "Wrote the script; it passes the checks" if res.get("ok") else f"Wrote the script; fixing {len(res.get('problems') or [])} problem(s)"
     if tool == "test_script":
-        return "Tested in the sandbox: right answer, same output twice" if res.get("passed") else "Tested in the sandbox: not right yet, fixing it"
+        if res.get("passed"):
+            return "Tested in the sandbox: right answer, same output twice" + (", and it runs on your files" if res.get("real_data") else "")
+        return "Tested in the sandbox: not right yet, fixing it"
     return tool
 
 

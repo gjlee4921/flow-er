@@ -11,7 +11,8 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { api, type Execution, type ExperimentState, type Script, type Step } from "../../api";
-import { followRun, refresh, useExecutions, useNodeTypes, useStepOutput } from "../../api/hooks";
+import { followRun, refresh, useExecutions, useGates, useNodeTypes, useSamples, useStepImages, useStepOutput } from "../../api/hooks";
+import { DensityImage } from "../../components/plots/DensityImage";
 import { Flower, Icon } from "../../components/icons";
 import { clamp, fmt, ui, useUi } from "../../lib";
 import { askInChat } from "../agent/Chat";
@@ -264,6 +265,42 @@ export function runLine(r: { nodes: Record<string, { status: string }> }): strin
   return n("cached") ? `Redid ${step(n("done"))}; reused ${n("cached")} that had not changed.` : `Ran ${step(n("done"))}.`;
 }
 
+/** The density images behind a step, for one file at a time: what a render step drew, or what a
+ *  script read and found (regions outlined). A step that made polygons can open them as draft gates. */
+function StepImages({ s, step }: { s: ExperimentState; step: Step }) {
+  const qc = useQueryClient();
+  const [file, setFile] = useState<string | undefined>();
+  const { data } = useStepImages(s.id, step.id, file, step.op === "render_image" || step.op === "custom_macro");
+  const { data: samples } = useSamples(s.id);
+  if (!data?.images.length) return null;
+  const density = data.images.find((i) => i.kind === "density");
+  const regions = data.images.find((i) => i.kind === "regions");
+  const name = (id?: string) => samples?.channels.find((c) => c.id === id)?.name ?? id;
+  const polygons = step.outputs.some((o) => /polygons$/.test(o));
+  const openGates = async () => {
+    try {
+      const r = await api.regionGates(s.id, step.id, data.file);
+      await refresh(qc, s.id);
+      ui.lab({ sample: r.sample, parent: r.parent || null, x: r.x, y: r.y, mode: "density", view: "plot", sel: r.gates[0] ?? null });
+      ui.open("lab");
+      ui.toast(`${r.gates.length} gates from the image are waiting: keep or undo them in the lab.`);
+    } catch (e) { ui.toast((e as Error).message); }
+  };
+  const short = (f: string) => f.replace(/^101_DEN084Y5_15_|_clean\.fcs$|\.fcs$/g, "");
+  return (
+    <div className="np-images">
+      {data.files.length > 1 && (
+        <select className="np-file" value={data.file} onChange={(e) => setFile(e.target.value)} aria-label="File">
+          {data.files.map((f) => <option key={f} value={f}>{short(f)}</option>)}
+        </select>
+      )}
+      {density && <DensityImage grid={density.grid} regions={regions?.grid} x={name(density.meta.x)} y={name(density.meta.y)} />}
+      {density && <p className="small muted">{(density.meta.parent || "All events").split("/").pop()} · {density.meta.events?.toLocaleString()} events · recipe {density.meta.recipe}</p>}
+      {polygons && <button className="btn sm" id="open-region-gates" onClick={openGates}>Open as gates in the data lab</button>}
+    </div>
+  );
+}
+
 /** A step's panel, as in n8n: what comes in, its settings, and what it made last time. */
 function NodePanel({ s, card, draft, onClose, onRun, run }: { s: ExperimentState; card: Card; draft: boolean; onClose: () => void;
   onRun: (mode: string, node: string) => void; run?: { status: string; summary?: string } }) {
@@ -271,6 +308,8 @@ function NodePanel({ s, card, draft, onClose, onRun, run }: { s: ExperimentState
   const step = card.step!;
   const { data: types } = useNodeTypes();
   const { data: out } = useStepOutput(s.id, step.id);
+  const { data: samples } = useSamples(s.id);
+  const { data: gates } = useGates(s.id, s.snapshot.samples[0]?.id);
   const [tab, setTab] = useState<"input" | "settings" | "code" | "output">(step.script && !out?.ran ? "code" : "output");
   const type = types?.types[step.op];
   const allSteps = s.plan;
@@ -306,7 +345,9 @@ function NodePanel({ s, card, draft, onClose, onRun, run }: { s: ExperimentState
             <div className="np-params">{Object.entries(type.params).map(([k, p]) => (
               <label key={k} className="np-param"><span>{p.label}</span>
                 <select id={`param-${k}`} value={step.params?.[k] ?? p.default ?? ""} disabled={draft} onChange={(e) => setParam(k, e.target.value)}>
-                  {(p.enum ?? []).map((v) => <option key={v} value={v}>{p.names?.[v] ?? v}</option>)}
+                  {(p.choices === "channels" ? (samples?.channels ?? []).map((c) => [c.id, c.name] as const)
+                    : p.choices === "gates" ? [["", "All events"] as const, ...(gates?.gates ?? []).map((g) => [g.key, g.key] as const)]
+                    : (p.enum ?? []).map((v) => [v, p.names?.[v] ?? v] as const)).map(([v, label]) => <option key={v} value={v}>{label}</option>)}
                 </select>
               </label>
             ))}<p className="small muted">A change is a draft of the plan: keep it, and the next run redoes this step and what reads from it; everything else is reused.</p></div>
@@ -315,6 +356,7 @@ function NodePanel({ s, card, draft, onClose, onRun, run }: { s: ExperimentState
         {tab === "code" && step.script && <ScriptView script={step.script} />}
         {tab === "output" && (
           <>
+            <StepImages s={s} step={step} />
             {run?.status === "running" ? <p className="np-status"><Flower className="sm" /> Running…</p>
               : out?.ran ? <p className="np-status"><span className={`ri-st ${run?.status ?? out.status}`}>{SAID[run?.status ?? out.status ?? ""] ?? out.status}</span> {run?.summary ?? out.summary}</p>
               : <p className="small muted">Not run yet.</p>}

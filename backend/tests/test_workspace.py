@@ -370,3 +370,47 @@ def test_a_script_step_passes_its_fixture_then_runs_in_the_workflow(exp):
     rows = lab.read_table(exp, "qc_qc")
     assert len(rows) == len(lab.dataset(exp).sample_ids) and all(0 < r["kept"] <= r["events"] for r in rows)
     assert executor.start(exp, wait=True)["nodes"]["qc"]["status"] == "cached"
+
+
+def test_a_memory_said_twice_is_kept_once_and_forget_takes_every_match(tmp_path, monkeypatch):
+    """The same preference told in two projects is one memory, refreshed; "forget what I said about
+    Tregs" removes every Treg memory, worded however it was."""
+    from flow_er.workspace import memory
+    monkeypatch.setattr(settings, "workspace_dir", tmp_path)
+    a = memory.add("Tregs are CD25 high CD127 low", "definition", "Tregs are CD25 high CD127 low", {"experiment": "a"})
+    b = memory.add("Tregs are CD25 high CD127 low", "definition", "Tregs are CD25 high CD127 low", {"experiment": "b"})
+    assert b.get("already") and b["id"] == a["id"] and len(memory.entries()) == 1
+    memory.add("Tregs: CD25 high, CD127 low", "definition", "my Tregs: CD25 high, CD127 low", {"experiment": "c"})
+    memory.add("Report T-cell subsets as % of CD3+", "preference", "report T-cell subsets as % of CD3+", {"experiment": "c"})
+    gone = memory.find_all("what I said about Tregs")
+    assert len(gone) == 2 and all("Treg" in m["text"] for m in gone)
+
+
+@needs_data
+@pytest.mark.skipif(not _sandboxed(), reason="no sandbox-exec or bubblewrap on this machine")
+def test_image_steps_find_cd4_and_cd8_like_flowjo(exp):
+    """Render, identify and convert on CD3+ cells drawn on CD4 x CD8: the regions, turned into gates in
+    the lab's space, match FlowJo's CD4+ and CD8+ gates (event-level F1 of at least 0.95 in every file)."""
+    import json as _json
+
+    from flow_er.workspace import executor, image_steps, render
+    from flow_er.workspace.data import in_polygon
+    x, y, p = "CD4 PE-Cy7 FLR-A", "CD8 PerCP-Cy55 FLR-A", "Time/Singlets/aAmine-/CD3+"
+    steps = plan.validate(image_steps.steps(p, x, y, {x: "CD4", y: "CD8"}))
+    assert [s["kind"] for s in steps] == ["macro", "model", "measure"]
+    store.set_draft(exp, "plan", steps, "image steps")
+    store.keep(exp)
+    run = executor.start(exp, wait=True)
+    assert all(n["status"] == "done" for n in run["nodes"].values()), run["nodes"]
+    ds = lab.dataset(exp)
+    polys = lab.read_table(exp, "img_cd4_cd8_gates_polygons")
+    for sid in ds.sample_ids:
+        cols = list(ds._sample(sid).pnn_labels)
+        ev, parent = ds.events(sid, "processed"), lab.membership(exp, sid, p)
+        for gate in ("CD4+", "CD8+"):
+            truth = lab.membership(exp, sid, f"{p}/{gate}")
+            f1s = []
+            for row in (r for r in polys if r["file"] == sid):
+                pred = parent & in_polygon(ev[:, cols.index(x)], ev[:, cols.index(y)], render.to_lab(exp, sid, x, y, _json.loads(row["vertices"])))
+                f1s.append(2 * (pred & truth).sum() / max(1, pred.sum() + truth.sum()))
+            assert max(f1s) >= 0.95, (sid, gate, max(f1s))

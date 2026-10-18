@@ -7,19 +7,24 @@ nothing lands in the experiment's state until `keep`.
 from __future__ import annotations
 
 import re
+import shutil
+import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from flow_er.llm import client
 from flow_er.workspace import (
     data,
     executor,
+    image_steps,
     lab,
     memory,
     models,
     nodes,
     plan,
+    scripts,
     store,
     toolkit,
     views,
@@ -301,14 +306,35 @@ def _macro(ctx: Ctx, goal: str, inputs: list[str] | None = None, after: str | No
         kind = nodes.port_type(name, steps)
         if kind in ("samples", "events"):
             ports[re.sub(r"\W+", "_", name)] = "events"
-        elif kind == "table":
-            ports[re.sub(r"\W+", "_", name)] = "table"
+        elif kind in ("table", "image"):
+            ports[re.sub(r"\W+", "_", name)] = kind
         else:
-            raise ValueError(f"a script reads the files' events or a table; '{name}' is {kind}")
+            raise ValueError(f"a script reads the files' events, a table or an image; '{name}' is {kind}")
     chans = [c["id"] for c in lab.dataset(ctx.exp_id).channels()]
+    # each table it reads: its columns (and a few real rows when the table exists), so the fixture is true to it
+    made_by = {o: s for s in steps for o in s.get("outputs", [])}
+    tables = {}
+    for (port, kind), name in zip(ports.items(), inputs):
+        if kind == "table":
+            last = next((r.get("table") for r in store.state(ctx.exp_id, "runs") if r["step"] == made_by.get(name, {}).get("id")), None)
+            rows = lab.read_table(ctx.exp_id, last or name)
+            cols = nodes.NODE_TYPES.get(made_by.get(name, {}).get("op", ""), {}).get("columns")
+            tables[port] = {"columns": cols or (list(rows[0]) if rows else None), "example_rows": rows[:6]}
+    # and the real inputs, to try each passing script on before it is offered
+    work = Path(tempfile.mkdtemp(prefix="flower-writer-"))
+    real_in: dict = {}
+
+    def real(code: str, params: dict) -> str | None:
+        if "inputs" not in real_in:
+            real_in["inputs"] = scripts.real_inputs(ctx.exp_id, ports, inputs, steps, work)
+        return scripts.try_real(code, real_in["inputs"], params) if real_in["inputs"] else None
+
     # what the writer is doing, shown live under this step (not kept with the message)
     progress = (lambda text: ctx.live({"type": "progress", "text": text})) if ctx.live else None
-    out = script_writer.write(goal, ports, chans, on_progress=progress)
+    try:
+        out = script_writer.write(goal, ports, chans, on_progress=progress, tables=tables, real=real)
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
     if out.get("refused"):
         return {"refused": out["refused"], "sources": out.get("fetched", [])}
     sid = re.sub(r"[^a-z0-9]+", "_", out["title"].lower()).strip("_")[:28] or "script"
@@ -329,6 +355,33 @@ def _macro(ctx: Ctx, goal: str, inputs: list[str] | None = None, after: str | No
             "source": prov.get("source") or "written for this step", "licence": prov.get("licence"),
             "test": {"passed": True, "same_output_twice": True, "seconds": out["test"].get("seconds")},
             "outputs": step["outputs"]}
+
+
+@tool("add_image_steps",
+      "Gate on a picture: add three steps that draw one population's events on two channels as a density image (the "
+      "gate models' recipe), find the populations on it (peaks and watershed with scikit-image; a gate model can take this "
+      "step's place later), and turn each region into a gate polygon with its event count. Tested, as one draft. The "
+      "regions become gates only when the scientist opens them in the data lab and keeps them.",
+      {"parent": {"type": "string", "description": "The population to draw, e.g. CD3+"},
+       "x": {"type": "string"}, "y": {"type": "string"}}, ["parent", "x", "y"])
+def _image_steps(ctx: Ctx, parent: str, x: str, y: str) -> dict:
+    d = store.draft(ctx.exp_id)
+    steps = [dict(s) for s in (d["payload"] if d and d["kind"] == "plan" else store.state(ctx.exp_id, "plan"))]
+    ds = lab.dataset(ctx.exp_id)
+    key = _gate(ctx, ds.sample_ids[0], parent) or ""
+    xc, yc = _channel(ctx, x), _channel(ctx, y)
+    short = {c["id"]: c["short"] for c in ds.channels()}
+    new = image_steps.steps(key, xc, yc, short, {s["id"] for s in steps})
+    labels = next((o for s in steps if s["op"] == "gate_from_workspace" for o in s.get("outputs", [])), None)
+    if labels:  # drawn after the gates are applied, so the canvas shows what it depends on
+        new[0]["inputs"] = [labels]
+    at = next((n + 1 for n, s in enumerate(steps) if labels in s.get("outputs", [])), len(steps))
+    clean = plan.validate(steps[:at] + new + steps[at:])
+    d = store.set_draft(ctx.exp_id, "plan", clean, f"Image steps: {new[0]['title']}")
+    ctx.emit(type="open", page="flow")
+    ctx.emit(type="refresh")
+    return {"draft": d["id"], "steps": [s["id"] for s in new], "population": key or "all events", "x": xc, "y": yc,
+            "summary": "Three tested steps: render the density image, find the populations, turn regions into gates and counts."}
 
 
 @tool("train_model", "Train the gating model for one gate. Says plainly if the models are not available yet.",
@@ -428,19 +481,23 @@ def _remember(ctx: Ctx, text: str, kind: str, quote: str) -> dict:
     if not memory.said(quote, ctx.user_text):
         raise ValueError("a memory can only be made from the scientist's own words in this message; quote them exactly")
     m = memory.add(text, kind, quote, {"experiment": ctx.exp_id, "title": store.meta(ctx.exp_id).get("title")})
+    if m.get("already"):
+        ctx.emit(type="memory", action="already", id=m["id"], text=m["text"])
+        return {"summary": f"Already remembered: {m['text']}", "id": m["id"]}
     ctx.emit(type="memory", action="added", id=m["id"], text=m["text"])
     return {"summary": f"Remembered: {m['text']}", "id": m["id"]}
 
 
-@tool("forget", "Forget a memory, by its id or by words that match it (\"what I said about Tregs\").",
+@tool("forget", "Forget memories, by id or by words that match them (\"what I said about Tregs\" forgets every memory about Tregs).",
       {"id": {"type": "string"}, "about": {"type": "string"}})
 def _forget(ctx: Ctx, id: str | None = None, about: str | None = None) -> dict:
-    m = next((x for x in memory.entries() if x["id"] == id), None) if id else memory.find(about or "")
-    if not m:
+    gone = [x for x in memory.entries() if x["id"] == id] if id else memory.find_all(about or "")
+    if not gone:
         raise ValueError("there is no memory like that")
-    memory.remove(m["id"])
-    ctx.emit(type="memory", action="forgotten", id=m["id"], text=m["text"])
-    return {"summary": f"Forgot: {m['text']}"}
+    for m in gone:
+        memory.remove(m["id"])
+        ctx.emit(type="memory", action="forgotten", id=m["id"], text=m["text"])
+    return {"summary": "Forgot: " + "; ".join(m["text"] for m in gone)}
 
 
 @tool("search_past_experiments", "Find earlier projects by words: their titles, what they were for, their plans, figures and what was kept.",
@@ -624,7 +681,7 @@ LABELS = {
     "read_attachment": "Reading {name}", "set_question": "Noting what the experiment is for",
     "plan_pipeline": "Drafting the plan", "edit_pipeline": "Changing the plan", "run_step": "Running {step_id}",
     "write_view": "Drawing a figure", "write_macro": "Writing a script", "train_model": "Checking the gating models",
-    "keep": "Keeping the draft", "undo": "Undoing the draft", "run_workflow": "Running the workflow", "read_execution": "Reading the run", "open_page": "Opening {page}", "focus_lab": "Pointing the data lab",
+    "add_image_steps": "Setting up image steps", "keep": "Keeping the draft", "undo": "Undoing the draft", "run_workflow": "Running the workflow", "read_execution": "Reading the run", "open_page": "Opening {page}", "focus_lab": "Pointing the data lab",
     "show_plot": "Laying out the plot", "compare_files": "Lining up the files", "select_gate": "Picking out {gate}",
     "gate_stats": "Reading the numbers", "show_sheet": "Filling the sheet",
 }

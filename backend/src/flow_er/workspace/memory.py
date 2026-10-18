@@ -60,11 +60,19 @@ def said(quote: str, message: str) -> bool:
 
 
 def add(text: str, kind: str, quote: str, source: dict) -> dict:
+    """Keep a memory. Said again (the same words), the one already kept is refreshed rather than
+    copied, and comes back with already=True."""
     if kind not in KINDS:
         kind = "preference"
+    items = entries()
+    same = next((m for m in items if _norm(m["text"]) == _norm(text) or _norm(m["quote"]) == _norm(quote)), None)
+    if same:
+        same.update(source=source, quote=quote.strip(), last_used=store.now())
+        _save(items)
+        return {**same, "already": True}
     m = {"id": uuid.uuid4().hex[:8], "text": text.strip(), "kind": kind, "quote": quote.strip(),
          "source": source, "created": store.now(), "last_used": None}
-    _save(entries() + [m])
+    _save(items + [m])
     return m
 
 
@@ -87,12 +95,22 @@ def remove(mem_id: str) -> dict:
     return gone
 
 
-def find(words: str) -> dict | None:
-    """The memory that best matches some words, for "forget what I said about Tregs"."""
-    ws = set(re.findall(r"[a-z0-9+]+", words.lower()))
+STOP = {"what", "i", "said", "say", "about", "the", "a", "an", "my", "me", "that", "this", "of", "to", "and", "is", "are", "as", "for", "on", "in"}
+
+
+def find_all(words: str) -> list[dict]:
+    """Every memory that best matches some words, for "forget what I said about Tregs": the same thing
+    said in two projects is two memories, and both go."""
+    ws = set(re.findall(r"[a-z0-9+]+", words.lower())) - STOP
     scored = [(len(ws & set(re.findall(r"[a-z0-9+]+", (m["text"] + " " + m["quote"]).lower()))), m) for m in entries()]
-    best = max(scored, key=lambda t: t[0], default=(0, None))
-    return best[1] if best[0] else None
+    best = max((s for s, _ in scored), default=0)
+    return [m for s, m in scored if best and s == best]
+
+
+def find(words: str) -> dict | None:
+    """The memory that best matches some words."""
+    found = find_all(words)
+    return found[0] if found else None
 
 
 def for_agent(context: str) -> list[dict]:

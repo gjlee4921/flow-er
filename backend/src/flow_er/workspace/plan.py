@@ -28,7 +28,8 @@ def validate(steps: list[dict]) -> list[dict]:
         if op not in OPS:
             problems.append(f"{where}: op must be one of {sorted(OPS)}")
             continue
-        kind = OPS[op][0]
+        # a script may say which stage it belongs to (finding populations is a model's job, say)
+        kind = s.get("kind") if op == "custom_macro" and s.get("kind") in KINDS else OPS[op][0]
         takes = nodes.NODE_TYPES[op]["takes"]
         for inp in s.get("inputs", []):
             if inp not in produced:

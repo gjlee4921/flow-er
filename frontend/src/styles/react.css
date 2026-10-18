@@ -408,3 +408,10 @@
 .np-prov dt { color: var(--text-3); } .np-prov dd { margin: 0; overflow-wrap: anywhere; color: var(--text-2); }
 .np-prov dd.ok { color: #4f7a5c; } .np-prov dd.bad { color: var(--c-flag); }
 .np-code { margin: 0; max-height: 320px; overflow: auto; padding: 10px 12px; border: 1px solid var(--sep); border-radius: var(--r-ctl); background: var(--panel); font: 11.5px/1.5 var(--mono); color: var(--text); white-space: pre; }
+/* a step's density image in its panel, with the file picker and the way to the lab */
+.np-images { display: grid; gap: 8px; justify-items: start; margin-bottom: 8px; }
+.np-file { font: inherit; font-size: 12.5px; padding: 4px 8px; border: 1px solid var(--sep-2); border-radius: var(--r-ctl); background: var(--bg); color: var(--text); }
+.dimg { margin: 0; display: grid; gap: 4px; }
+.dimg canvas { border: 1px solid var(--sep); border-radius: var(--r-tag); display: block; }
+.dimg figcaption { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-3); }
+.dimg-y::before { content: "y: "; } .dimg figcaption span:first-child::before { content: "x: "; }

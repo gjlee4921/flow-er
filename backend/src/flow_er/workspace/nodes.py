@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import csv
 
-from flow_er.workspace import lab, models, scripts, store
+from flow_er.workspace import lab, models, render, scripts, store
 
 SOURCES = {"fcs": "samples", "wsp": "gates", "uploads": "file"}  # inputs that exist before any step runs
 
@@ -18,14 +18,24 @@ NODE_TYPES: dict[str, dict] = {
     # the FlowJo workspace (a "gates" source) also carries the spillover matrix and the transforms
     "compensate": {"name": "Compensate and transform", "kind": "macro", "takes": ["samples", "gates"], "makes": "events", "version": "1",
                    "about": "Apply the spillover matrix and the display transforms (FlowKit), from the FlowJo workspace when there is one."},
-    "custom_macro": {"name": "Script", "kind": "macro", "takes": ["samples", "events", "table", "derived events"], "makes": "*", "version": "3",
+    "render_image": {"name": "Render a density image", "kind": "macro", "takes": ["samples", "events", "labels", "gates"], "makes": "image",
+                     "version": "1", "reads_gates": True,
+                     "about": "Bin one population's events on two channels into a 101 × 101 density image, the way the gate models read them (recipe 1bd7b6e6).",
+                     "params": {"x": {"label": "X channel", "choices": "channels"}, "y": {"label": "Y channel", "choices": "channels"},
+                                "parent": {"label": "Population", "choices": "gates", "default": ""}}},
+    "custom_macro": {"name": "Script", "kind": "macro", "takes": ["samples", "events", "table", "derived events", "image"], "makes": "*", "version": "3",
                      "about": "A script for a step no built-in op covers, written or adapted by the agent, tested and run in the sandbox."},
     "gate_from_workspace": {"name": "Apply the FlowJo gates", "kind": "model", "takes": ["events", "samples", "gates"], "makes": "labels", "version": "1",
                             "about": "Use the gates in the lab's FlowJo workspace as the labels."},
     "train_gate_model": {"name": "Train a gate model", "kind": "model", "takes": ["labels", "events", "samples", "gates"], "makes": "model", "version": "1",
                          "about": "Train a per-gate model on the labelled samples (flow_er.ml)."},
     "population_stats": {"name": "Count every gate", "kind": "measure", "takes": ["labels", "events", "gates", "samples", "model"], "makes": "table", "version": "2",
-                         "about": "Count every gate in every sample: count, % of parent, % of total.", "reads_gates": True},
+                         "about": "Count every gate in every sample: count, % of parent, % of total.", "reads_gates": True,
+                         # what a script reading this table is told, so its fixture looks like the real thing
+                         "columns": {"sample": "the FCS file name", "gate": "the gate's own name, e.g. CD3+",
+                                     "gate_path": "its full path from the top, e.g. Time/Singlets/aAmine-/CD3+",
+                                     "parent": "the parent's gate_path ('' for a top gate)", "source": "flowjo or user",
+                                     "count": "events in the gate", "pct_parent": "% of its parent", "pct_total": "% of all events"}},
     "export_prism": {"name": "Export for Prism", "kind": "view", "takes": ["table"], "makes": "file", "version": "2",
                      "about": "A Prism-ready CSV: one row per file, one column per gate.",
                      "params": {"value": {"label": "Value in each cell", "enum": ["pct_parent", "count", "pct_total"], "default": "pct_parent",
@@ -94,6 +104,15 @@ def run(exp_id: str, step: dict, samples: list[str] | None = None) -> dict:
         return {"status": "done", "summary": f"Wrote population_stats: {len(rows)} rows{added}.", "table": "population_stats"}
     if op == "export_prism":
         return _prism(exp_id, (step.get("params") or {}).get("value", "pct_parent"))
+    if op == "render_image":
+        p = step.get("params") or {}
+        if not p.get("x") or not p.get("y"):
+            return {"status": "failed", "summary": "Choose the two channels to draw."}
+        folder = store.path(exp_id, "derived", step["id"], "image")
+        for sid in which:
+            render.save(folder, sid, render.render(exp_id, sid, p["x"], p["y"], p.get("parent") or None))
+        pop = (p.get("parent") or "all events").split("/")[-1]
+        return {"status": "done", "summary": f"Drew {len(which)} density image{'s' if len(which) != 1 else ''} of {pop} (recipe {render.RECIPE})."}
     if op == "custom_macro":
         if not step.get("script"):
             return {"status": "blocked", "summary": "This script step has no script yet."}
@@ -106,7 +125,9 @@ def run(exp_id: str, step: dict, samples: list[str] | None = None) -> dict:
         events_from = {}  # inputs that are another script's events: the folder it left them in
         for i in step.get("inputs", []):
             src = by_id.get(made_by.get(i, ""))
-            if src and src.get("op") == "custom_macro" and src.get("script"):
+            if src and src.get("op") == "render_image":
+                events_from[i] = output_folder(exp_id, src, i)
+            elif src and src.get("op") == "custom_macro" and src.get("script"):
                 outs = list(scripts.check(src["script"]["code"]).get("outputs") or {})
                 port = dict(zip(src["outputs"], outs)).get(i)
                 if port:
@@ -115,6 +136,16 @@ def run(exp_id: str, step: dict, samples: list[str] | None = None) -> dict:
     if op == "view":
         return {"status": "done", "summary": "Figures draw themselves from their table."}
     return {"status": "failed", "summary": f"No step of kind {op}."}
+
+
+def output_folder(exp_id: str, step: dict, output: str):
+    """Where a step leaves the files behind one of its outputs: a render step's images, or the events
+    or images a script returned."""
+    if step.get("op") == "render_image":
+        return store.path(exp_id, "derived", step["id"], "image")
+    outs = list(scripts.check(step.get("script", {}).get("code", "")).get("outputs") or {})
+    port = dict(zip(step.get("outputs", []), outs)).get(output, output)
+    return store.path(exp_id, "derived", step["id"], port)
 
 
 def _prism(exp_id: str, value: str = "pct_parent") -> dict:

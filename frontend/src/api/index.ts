@@ -79,11 +79,12 @@ export type Memory = { id: string; text: string; kind: "definition" | "preferenc
 export type ExecNode = { status: "queued" | "running" | "done" | "cached" | "failed" | "blocked"; title: string; op: string; summary?: string; table?: string | null; seconds?: number };
 export type Execution = { id: string; trigger: string; mode: string; node: string | null; started: string; finished: string | null; status: string; nodes: Record<string, ExecNode> };
 export type NodeType = { name: string; kind: string; takes: string[]; makes: string; version: string; about: string;
-  params?: Record<string, { label: string; enum?: string[]; default?: string; names?: Record<string, string> }> };
+  params?: Record<string, { label: string; enum?: string[]; default?: string; names?: Record<string, string>; choices?: "channels" | "gates" }> };
+export type StepImage = { port: string; role: "input" | "output"; kind: string; grid: number[][]; meta: { x?: string; y?: string; parent?: string; recipe?: string; events?: number } };
 export type UiEvent =
   | { type: "refresh" }
   | { type: "execution"; id: string }
-  | { type: "memory"; action: "added" | "forgotten"; id: string; text: string }
+  | { type: "memory"; action: "added" | "already" | "forgotten"; id: string; text: string }
   | { type: "progress"; text: string }
   | { type: "open"; page: string }
   | { type: "lab"; fig?: string | null; sample?: string; parent?: string | null; x?: string; y?: string; stage?: string; mode?: string;
@@ -202,6 +203,10 @@ export const api = {
   runWorkflow: (id: string, mode = "all", node?: string) => req<Execution>("POST", `/experiments/${id}/executions`, { mode, node }),
   executions: (id: string) => req<Execution[]>("GET", `/experiments/${id}/executions`),
   execution: (id: string, eid: string) => req<Execution>("GET", `/experiments/${id}/executions/${eid}`),
+  stepImages: (id: string, step: string, file?: string) =>
+    req<{ files: string[]; file?: string; images: StepImage[] }>("GET", `/experiments/${id}/steps/${encodeURIComponent(step)}/images${q({ file })}`),
+  regionGates: (id: string, step: string, file?: string) =>
+    req<{ gates: string[]; sample: string; parent: string; x: string; y: string }>("POST", `/experiments/${id}/steps/${encodeURIComponent(step)}/gates`, { file }),
   stepOutput: (id: string, step: string) => req<{ ran: boolean; status?: string; summary?: string; table?: string; at?: string; execution?: string; rows?: Record<string, any>[]; total_rows?: number }>("GET", `/experiments/${id}/steps/${encodeURIComponent(step)}/output`),
   setParams: (id: string, step: string, params: Record<string, string>) => req<Draft>("POST", `/experiments/${id}/steps/${encodeURIComponent(step)}/params`, { params }),
   setActive: (id: string, on: boolean) => req<{ active: boolean }>("POST", `/experiments/${id}/active`, { on }),

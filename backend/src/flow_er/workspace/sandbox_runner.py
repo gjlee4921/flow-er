@@ -21,6 +21,11 @@ def load(spec: dict):
     files = {}
     for f in sorted(p.glob("*.npz")):
         z = np.load(f, allow_pickle=False)
+        meta = f.with_suffix(".json")
+        if "grid" in z.files:  # an image: its grid (rows = y), pixel edges and what it shows
+            files[f.stem] = {"grid": z["grid"], "x_edges": z["x_edges"], "y_edges": z["y_edges"],
+                             "meta": json.loads(meta.read_text()) if meta.exists() else {}}
+            continue
         df = pd.DataFrame(z["data"], columns=[str(c) for c in z["columns"]])
         kw = f.with_suffix(".json")
         df.attrs["keywords"] = json.loads(kw.read_text()) if kw.exists() else {}
@@ -32,12 +37,21 @@ def save(name: str, value) -> str:
     if isinstance(value, pd.DataFrame):
         value.to_csv(out / f"{name}.csv", index=False, float_format="%.10g")
         return f"{name}.csv"
+    if isinstance(value, dict) and value and all(isinstance(v, dict) and "grid" in v for v in value.values()):
+        (out / name).mkdir()
+        for sid, im in sorted(value.items()):
+            grid = np.asarray(im["grid"], dtype="float32")
+            np.savez(out / name / f"{sid}.npz", grid=grid, x_edges=np.asarray(im.get("x_edges", np.arange(grid.shape[1] + 1))),
+                     y_edges=np.asarray(im.get("y_edges", np.arange(grid.shape[0] + 1))))
+            (out / name / f"{sid}.json").write_text(json.dumps(im.get("meta") or {}, default=str))
+        return name
     if isinstance(value, dict) and all(isinstance(v, pd.DataFrame) for v in value.values()):
         (out / name).mkdir()
         for sid, df in sorted(value.items()):
             np.savez(out / name / f"{sid}.npz", data=df.to_numpy(dtype="float64"), columns=np.array(df.columns, dtype=str))
         return name
-    raise TypeError(f"output '{name}' must be a table (DataFrame) or one table per file (dict of DataFrames)")
+    raise TypeError(f"output '{name}' must be a table (DataFrame), one table per file (dict of DataFrames) "
+                    "or one image per file (dict of {grid, x_edges, y_edges, meta})")
 
 
 def main() -> int:

@@ -32,7 +32,7 @@ LICENCES = {"MIT", "BSD-2-Clause", "BSD-3-Clause", "Apache-2.0", "ISC", "PSF-2.0
 REACH = {"os", "sys", "subprocess", "socket", "shutil", "pathlib", "glob", "io", "tempfile", "importlib", "ctypes", "urllib",
          "http", "ftplib", "smtplib", "requests", "pickle", "marshal", "builtins", "multiprocessing", "threading", "signal", "inspect"}
 BANNED_CALLS = {"open", "eval", "exec", "compile", "__import__", "input", "breakpoint", "globals", "vars"}
-PORTS = {"events", "table"}
+PORTS = {"events", "table", "image"}
 
 
 def _literal(tree: ast.Module, name: str):
@@ -110,6 +110,19 @@ def _write_events(folder: Path, files: dict[str, dict]) -> None:
             (folder / f"{sid}.json").write_text(json.dumps(t["keywords"]))
 
 
+def _write_images(folder: Path, files: dict[str, dict]) -> None:
+    """Fixture images: per file a grid (rows = y), its pixel edges and what it shows."""
+    folder.mkdir(parents=True, exist_ok=True)
+    for sid, im in files.items():
+        grid = np.asarray(im["grid"], dtype="float32")
+        ny, nx = grid.shape
+        xe, ye = im.get("x_edges"), im.get("y_edges")
+        np.savez(folder / f"{sid}.npz", grid=grid,
+                 x_edges=np.asarray(xe if xe is not None else (np.arange(nx + 1) - 0.5) / max(1, nx - 1)),
+                 y_edges=np.asarray(ye if ye is not None else (np.arange(ny + 1) - 0.5) / max(1, ny - 1)))
+        (folder / f"{sid}.json").write_text(json.dumps(im.get("meta") or {}))
+
+
 def _write_table(path: Path, t: dict) -> None:
     with open(path, "w", newline="") as f:
         w = csv.writer(f)
@@ -156,6 +169,9 @@ def test(code: str, fixture: dict) -> dict:
                 return {"passed": False, "problems": [f"the fixture has no input '{port}'"]}
             if kind == "events":
                 _write_events(tmp / "in" / port, given)
+                inputs[port] = tmp / "in" / port
+            elif kind == "image":
+                _write_images(tmp / "in" / port, given)
                 inputs[port] = tmp / "in" / port
             else:
                 (tmp / "in").mkdir(exist_ok=True)
@@ -218,6 +234,34 @@ def _events_input(exp_id: str, folder: Path, samples: list[str] | None) -> Path:
     return folder
 
 
+def real_inputs(exp_id: str, ports: dict[str, str], sources: list[str], steps: list[dict], folder: Path) -> dict[str, Path] | None:
+    """The real inputs a new script would get, to try it on before it is offered: every file's events,
+    and each table that exists already. None when a table it reads has not been made yet."""
+    made_by = {o: s["id"] for s in steps for o in s.get("outputs", [])}
+    last = {r["step"]: r for r in store.state(exp_id, "runs")}
+    out = {}
+    for (port, kind), src in zip(ports.items(), sources):
+        if kind == "events":
+            out[port] = _events_input(exp_id, folder / port, None)
+            continue
+        name = last.get(made_by.get(src, ""), {}).get("table") or src
+        path = store.path(exp_id, "tables", f"{name}.csv")
+        if not path.exists():
+            return None
+        out[port] = path
+    return out
+
+
+def try_real(code: str, inputs: dict[str, Path], params: dict) -> str | None:
+    """None if the script runs on the real inputs, otherwise what stopped it."""
+    tmp = Path(tempfile.mkdtemp(prefix="flower-real-"))
+    try:
+        r = sandbox.run(code, inputs, tmp, params)
+        return None if r["status"] == "done" else r["error"]
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def run_step(exp_id: str, step: dict, macro: dict, table_for: dict[str, str], samples: list[str] | None = None,
              events_from: dict[str, Path] | None = None) -> dict:
     """Run a kept script for its step. `table_for` maps each input that is a table to the saved table
@@ -231,11 +275,13 @@ def run_step(exp_id: str, step: dict, macro: dict, table_for: dict[str, str], sa
         inputs = {}
         for port, kind in c["inputs"].items():
             src = (step.get("inputs") or [None])[list(c["inputs"]).index(port)] if step.get("inputs") else None
-            if kind == "events" and (events_from or {}).get(src):
+            if kind in ("events", "image") and (events_from or {}).get(src):
                 folder = events_from[src]
                 if not folder.exists():
-                    return {"status": "blocked", "summary": f"Waiting on the events for '{port}'; run the script that makes them first."}
+                    return {"status": "blocked", "summary": f"Waiting on the {kind} for '{port}'; run the step that makes it first."}
                 inputs[port] = folder
+            elif kind == "image":
+                return {"status": "blocked", "summary": f"'{port}' is an image; it must come from a render step or a script that makes images."}
             elif kind == "events":
                 inputs[port] = _events_input(exp_id, tmp / "in" / port, samples)
             else:
@@ -260,7 +306,10 @@ def run_step(exp_id: str, step: dict, macro: dict, table_for: dict[str, str], sa
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copytree(path, dst)
         what = f"Wrote {', '.join(saved)}" if saved else "Ran"
-        return {"status": "done", "summary": f"{what} in the sandbox ({r['seconds']} s).", "table": saved[0] if saved else None,
+        # the table the panel opens on: the first one with rows (a list of flagged intervals may be empty)
+        rows = {n: len(store.path(exp_id, "tables", f"{n}.csv").read_text().splitlines()) - 1 for n in saved}
+        main = next((n for n in saved if rows[n] > 0), saved[0] if saved else None)
+        return {"status": "done", "summary": f"{what} in the sandbox ({r['seconds']} s).", "table": main,
                 "hash": r["hash"]}
     finally:
         shutil.rmtree(tmp, ignore_errors=True)

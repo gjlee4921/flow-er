@@ -21,7 +21,7 @@ type Props = {
 
 const PAD = { l: 44, r: 12, t: 12, b: 36 };
 const DENS = [[214, 228, 246], [146, 184, 232], [74, 134, 214], [36, 92, 186], [122, 86, 170], [214, 120, 58], [228, 92, 40]];
-function densCol(u: number) {
+export function densCol(u: number) {
   const t = Math.pow(Math.max(0, Math.min(1, u)), 0.55) * (DENS.length - 1);
   const i = Math.min(DENS.length - 2, Math.floor(t)), f = t - i;
   const c = DENS[i].map((v, k) => Math.round(v + (DENS[i + 1][k] - v) * f));

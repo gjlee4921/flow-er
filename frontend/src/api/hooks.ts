@@ -39,6 +39,8 @@ export function followRun(exp: string, id: string, qc?: QueryClient) {
   es.onerror = () => es.close();
 }
 
+export const useStepImages = (id: string | null, step: string | null, file?: string, on = true) =>
+  useQuery({ queryKey: ["exp", id, "images", step, file], queryFn: () => api.stepImages(id!, step!, file), enabled: !!id && !!step && on });
 export const useMemory = () => useQuery({ queryKey: ["memory"], queryFn: api.memory });
 export const useToolkit = () => useQuery({ queryKey: ["toolkit"], queryFn: api.toolkit, staleTime: Infinity });
 export const useStats = (id: string | null, gates: string[], cols: string[], on = true) =>

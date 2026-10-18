@@ -55,7 +55,7 @@ function MemoryChip({ e }: { e: Extract<UiEvent, { type: "memory" }> }) {
   };
   return (
     <div className={`memo${undone ? " undone" : ""}`} role="status">
-      <span className="memo-k">{e.action === "added" ? (undone ? "Forgotten" : "Remembered") : "Forgot"}</span>
+      <span className="memo-k">{e.action === "added" ? (undone ? "Forgotten" : "Remembered") : e.action === "already" ? "Already remembered" : "Forgot"}</span>
       <span className="memo-t">{e.text}</span>
       {e.action === "added" && !undone && <button className="btn sm plain" onClick={undo}>Undo</button>}
       {e.action === "added" && !undone && <button className="btn sm plain" onClick={() => ui.set({ memoryOpen: true })}>See all</button>}
