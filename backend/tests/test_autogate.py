@@ -78,3 +78,31 @@ def test_lab_als_gates_an_unseen_file_like_the_expert(tmp_path, monkeypatch):
         assert "/unito/" in g["model"] and g["f1"] >= 0.9, (g["gate"], g["model"], g.get("f1"))
     review = models.review(exp, "HC Specimen_001_C5_C05 Peptide.fcs")
     assert len(review["gates"]) == 15 and all(k.endswith("(model)") for k in review["gates"])
+
+
+@needs_als
+@needs_models
+def test_raw_files_with_no_workspace_are_gated_by_the_lab_their_panel_matches(tmp_path, monkeypatch):
+    """Files nobody has gated (no FlowJo workspace): channels are named as the models name them
+    ("LIVE_DEAD Aqua-A"), the file's own spillover compensates them as FlowJo does, the lab is found
+    by its panel, and the review nests each model gate under the model's own parent."""
+    import numpy as np
+    from flow_er.workspace import models
+    from flow_er.workspace.data import Dataset
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    for n in (4, 5):
+        f = next(ALS.glob(f"HC Specimen_001_C{n}_C0{n} *.fcs"))
+        (raw / f.name).symlink_to(f)
+    monkeypatch.setattr(settings, "workspace_dir", tmp_path / "ws")
+    exp = store.create(raw, "raw")["id"]
+    sid = "HC Specimen_001_C5_C05 Peptide.fcs"
+    ds, flowjo = Dataset(raw), Dataset(ALS)
+    cols = list(ds._sample(sid).pnn_labels)
+    assert "LIVE_DEAD Aqua-A" in cols and ds.uniform
+    assert np.allclose(ds.compensated(sid)[:, cols.index("FITC-A")],
+                       flowjo.compensated(sid)[:, list(flowjo._sample(sid).pnn_labels).index("FITC-A")], atol=1e-3)
+    assert models.lab_for(exp) == "als"
+    review = models.review(exp, sid)
+    assert len(review["gates"]) == 15
+    assert "Lymphocytes (model)/Single Cells 1 (model)" in review["gates"]

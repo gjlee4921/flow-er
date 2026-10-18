@@ -208,11 +208,12 @@ class Dataset:
         self.ws = self.workspaces[0][1] if self.workspaces else None
         if self.workspaces:
             self.wsp_path = self.workspaces[0][0]
-        # One display for every file when the workspaces' own would disagree: several workspaces
-        # (each plate its own transforms) or FlowJo's biex scale (not 0-1). Then every file is drawn
+        # One display for every file when there is no workspace to take one from, or when the
+        # workspaces' own would disagree: several workspaces (each plate its own transforms) or
+        # FlowJo's biex scale (not 0-1). Then every file is drawn
         # and gated in the gate models' display units (linear x/$PnR, logicle T=$PnR W=0.5 M=4.5), so a
         # gate means the same cells in every file, and model polygons need no conversion.
-        self.uniform = len(self.workspaces) > 1 or any(
+        self.uniform = not self.workspaces or len(self.workspaces) > 1 or any(
             isinstance(t, fk.transforms.WSPBiexTransform)
             for ws, name in {id(w): (w, n) for w, n in self._where.values()}.values()
             for t in ws.get_transforms(name).values())
@@ -245,7 +246,14 @@ class Dataset:
                 self._samples[sid] = ws.get_sample(name)
             else:
                 p = next(f for f in self.fcs if f.name == sid)
-                self._samples[sid] = fk.Sample(str(p))
+                s = fk.Sample(str(p))
+                # channels named as FlowJo and the gate models name them ("LIVE/DEAD Aqua-A" is
+                # "LIVE_DEAD Aqua-A"), so a lab's gates find their channels in raw files too
+                s.pnn_labels = [n.replace("/", "_") for n in s.pnn_labels]
+                s.channels["pnn"] = s.pnn_labels
+                if "spill" in s.metadata:
+                    s.metadata["spill"] = s.metadata["spill"].replace("/", "_")
+                self._samples[sid] = s
         return self._samples[sid]
 
     def samples(self) -> list[dict]:
@@ -300,7 +308,9 @@ class Dataset:
             cm = self._where[sid][0].get_comp_matrix(self._where[sid][1]) if sid in self._where else None
             if cm is None and "spill" in s.metadata:
                 try:
-                    cm = fk.Matrix(s.metadata["spill"], s.pnn_labels)
+                    # the file's own spillover matrix, over the detectors it lists (not every channel)
+                    parts = s.metadata["spill"].split(",")
+                    cm = fk.Matrix(s.metadata["spill"], parts[1:int(parts[0]) + 1])
                 except Exception:
                     log.warning("could not use the spillover matrix in %s", sid, exc_info=True)
                     cm = None

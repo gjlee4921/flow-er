@@ -69,16 +69,25 @@ def _flowjo_keys(exp_id: str) -> set[str]:
 
 def lab_for(exp_id: str) -> str | None:
     """The lab whose template names most of this experiment's FlowJo gates (at least 80% of the
-    template's gates), or None. Labs that match as well (a copy of a lab, say) are told apart by
-    having a current version, then by name, so the choice never depends on folder order."""
+    template's gates), or None. Files with no FlowJo gates at all (raw files, nobody has gated them)
+    go to a lab whose template is drawn only on channels these files have: the same panel. Labs that
+    match as well (a copy of a lab, say) are told apart by having a current version, then by name, so
+    the choice never depends on folder order."""
     pinned = store.meta(exp_id).get("lab")
     if pinned and (labs_root() / pinned / "template.json").exists():
         return pinned          # a project pinned to one lab (a copy for a demo, say) teaches only that one
     keys = _flowjo_keys(exp_id)
+    ds = labmod.dataset(exp_id)
+    channels = set(ds._sample(ds.sample_ids[0]).pnn_labels) if not keys and ds.sample_ids else set()
     found = []
-    for t in labs_root().glob("*/template.json") if keys and labs_root().exists() else []:
-        names = {g["key"] for g in json.loads(t.read_text()).get("gates", [])}
-        share = len(names & keys) / max(1, len(names))
+    for t in labs_root().glob("*/template.json") if labs_root().exists() else []:
+        gates = json.loads(t.read_text()).get("gates", [])
+        if keys:
+            names = {g["key"] for g in gates}
+            share = len(names & keys) / max(1, len(names))
+        else:
+            drawn = {c for g in gates for c in (g.get("x"), g.get("y")) if c}
+            share = 1.0 if drawn and drawn <= channels else 0.0
         if share >= 0.8:
             found.append((-share, not (t.parent / "current").exists(), t.parent.name))
     return min(found)[2] if found else None
@@ -238,18 +247,22 @@ def review(exp_id: str, sid: str) -> dict:
     qc = {g.key for g in template(exp_id).gates if getattr(g, "qc", False)}
     # a second file reviewed in the same project gets "(model 2)", so each kept gate stays tied to its file
     n = 1
-    while any(f"{g['parent']}/{g['gate'].split('/')[-1]} {_suffix(n)}".lstrip("/") in kept for g in body["gates"]):
+    kept_names = {k.split("/")[-1] for k in kept}
+    while any(f"{g['gate'].split('/')[-1]} {_suffix(n)}" in kept_names for g in body["gates"]):
         n += 1
-    gates, first = [], None
+    gates, first, placed = [], None, {}
     for g in body["gates"]:
         raw = (g.get("polygon") or {}).get("raw")
-        if not raw or g["gate"] in qc or (g["parent"] and g["parent"] not in taken):
+        # under FlowJo's gate of that name when the files have one, else under the model's own (raw files)
+        parent = g["parent"] if not g["parent"] or g["parent"] in taken else placed.get(g["parent"])
+        if not raw or g["gate"] in qc or (g["parent"] and not parent):
             continue
         name = f"{g['gate'].split('/')[-1]} {_suffix(n)}"
-        key = f"{g['parent']}/{name}" if g["parent"] else name
+        key = f"{parent}/{name}" if parent else name
+        placed[g["gate"]] = key
         pts = np.asarray(raw, dtype=float)
         cols = [xf[c].apply(pts[:, j]) if xf.get(c) is not None else pts[:, j] for j, c in enumerate((g["x"], g["y"]))]
-        gates.append({"key": key, "name": name, "parent": g["parent"] or None, "source": "user", "kind": "polygon",
+        gates.append({"key": key, "name": name, "parent": parent or None, "source": "user", "kind": "polygon",
                       "dims": [g["x"], g["y"]], "vertices": [[float(a), float(b)] for a, b in zip(*cols)],
                       "reviewed_on": sid})
         if first is None or (g["low_confidence"] and not first["low_confidence"]):
@@ -309,7 +322,7 @@ def _scientists_polygons(exp_id: str, sid: str) -> dict[str, list[list[float]]]:
     fcs = FcsFile(ds.sample_path(sid))
     out = {}
     for g in mine:
-        key = (f"{g['parent']}/" if g.get("parent") else "") + MODEL_NAME.sub("", g["name"])
+        key = "/".join(MODEL_NAME.sub("", part) for part in g["key"].split("/"))
         x, y = g["dims"]
         v = np.asarray(g["vertices"], dtype=float)
         raw = np.column_stack([xf[c].inverse(v[:, j]) if xf.get(c) is not None else v[:, j] for j, c in enumerate((x, y))])
