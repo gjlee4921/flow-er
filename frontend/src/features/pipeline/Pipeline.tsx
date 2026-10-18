@@ -11,9 +11,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { api, type Execution, type ExperimentState, type LabJob, type Script, type Step, type ViewSpec } from "../../api";
-import {
-  followRun, refresh, useAutogateFiles, useAutogateResult, useExecutions, useGates, useLabModels, useNodeTypes, useSamples, useStepImages, useStepOutput,
-} from "../../api/hooks";
+import { followRun, refresh, useAutogateFiles, useAutogateResult, useExecutions, useGates, useLabModels, useNodeTypes, useRounds, useSamples, useStepImages, useStepOutput } from "../../api/hooks";
 import { DensityImage } from "../../components/plots/DensityImage";
 import { Flower, Icon } from "../../components/icons";
 import { clamp, fmt, gateLabel, ui, useUi } from "../../lib";
@@ -376,6 +374,7 @@ function AutogatePanel({ s }: { s: ExperimentState }) {
   const sample = file ?? files?.files.find((f) => f.gated)?.sample ?? files?.files[0]?.sample;
   const { data: res, isFetching } = useAutogateResult(s.id, sample);
   const { data: lab } = useLabModels(files?.lab);
+  const { data: learnable } = useRounds();
   const short = (f: string) => f.replace(/^101_DEN084Y5_15_|_clean\.fcs$|\.fcs$/g, "");
   const review = async () => {
     if (!sample) return;
@@ -445,6 +444,8 @@ function AutogatePanel({ s }: { s: ExperimentState }) {
         <button className="btn sm ink" id="ag-review" onClick={review} disabled={!gates.length}>Review in the data lab</button>
         <button className="btn sm" id="ag-watch" onClick={() => { ui.lab({ live: true, view: "plot", compare: false }); ui.open("lab"); }}
           title="Watch the models gate each file, gate by gate, in the data lab">Watch the models</button>
+        {!!learnable?.labs.length && <button className="btn sm" id="ag-rounds" title="How the lab's models got better, round by round, on samples they were never taught"
+          onClick={() => { ui.lab({ rounds: learnable.labs.includes(files?.lab ?? "") ? files!.lab : learnable.labs[0], view: "plot", compare: false }); ui.open("lab"); }}>Watch the models learn</button>}
         {files?.lab && <button className="btn sm" id="ag-teach" onClick={teach} disabled={!gates.length} title="Keep these gates as training examples for the lab's next version">Teach the models</button>}
       </div>
       {!!lab?.versions.length && (

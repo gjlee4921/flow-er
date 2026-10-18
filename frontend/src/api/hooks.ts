@@ -47,6 +47,8 @@ export const useAutogateFiles = (id: string | null, on = true, every: number | f
   useQuery({ queryKey: ["exp", id, "autogate"], queryFn: () => api.autogateFiles(id!), enabled: !!id && on, refetchInterval: every });
 export const useAutogateResult = (id: string | null, sample?: string) =>
   useQuery({ queryKey: ["exp", id, "autogate", sample], queryFn: () => api.autogateResult(id!, sample!), enabled: !!id && !!sample });
+export const useRounds = () => useQuery({ queryKey: ["rounds"], queryFn: api.rounds, staleTime: 60000 });
+export const useLabRounds = (lab?: string | null) => useQuery({ queryKey: ["rounds", lab], queryFn: () => api.labRounds(lab!), enabled: !!lab, staleTime: Infinity });
 export const useLabModels = (lab?: string | null) =>
   useQuery({ queryKey: ["lab", lab, "models"], queryFn: () => api.labModels(lab!), enabled: !!lab });
 export const useMemory = () => useQuery({ queryKey: ["memory"], queryFn: api.memory });

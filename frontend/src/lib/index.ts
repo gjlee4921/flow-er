@@ -77,6 +77,8 @@ export type LabState = {
   compare: boolean;
   /** watching the lab's models gate the files as a run does it (the data lab opens on this by itself) */
   live: boolean;
+  /** the lab whose models are shown learning, round by round (demo), or null */
+  rounds?: string | null;
   /** the sheet: which gates (none = all), which toolkit statistics as columns ("stat:parameter:arg"),
    *  a text filter, the sort, a column coloured by value and a column charted */
   sheetGates: string[]; sheetSpec: string[]; sheetFilter: string; sheetSort: { key: string; desc: boolean } | null;
@@ -105,7 +107,7 @@ export type UiState = {
 
 const LAB0: LabState = {
   parent: null, stage: "processed", mode: "density", tool: "select", sel: null, view: "plot", fig: null,
-  compare: false, sheetGates: [], sheetSpec: [], sheetFilter: "", sheetSort: null, sheetColour: null, sheetChart: null, ask: false, live: false,
+  compare: false, sheetGates: [], sheetSpec: [], sheetFilter: "", sheetSort: null, sheetColour: null, sheetChart: null, ask: false, live: false, rounds: null,
 };
 const saved = (() => { try { return localStorage.getItem("flower.exp"); } catch { return null; } })();
 // each project has its own link (…/#<project id>): opening or pasting one opens that project. A reload
@@ -159,7 +161,7 @@ export const ui = {
       full: page === "lab" ? true : s.page === "lab" ? false : s.full,
     }));
   },
-  leaveLab() { const s = ui.get(); ui.set({ page: s.prevPage, full: false, lab: { ...s.lab, live: false } }); },
+  leaveLab() { const s = ui.get(); ui.set({ page: s.prevPage, full: false, lab: { ...s.lab, live: false, rounds: null } }); },
   toast(text: string) {
     ui.set({ toast: text });
     window.clearTimeout(toastTimer);

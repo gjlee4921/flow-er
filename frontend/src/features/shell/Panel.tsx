@@ -5,6 +5,7 @@ import { Icon, Sprout } from "../../components/icons";
 import { ui, useUi, type Page } from "../../lib";
 import DataLab from "../explore/DataLab";
 import LiveLab from "../explore/LiveLab";
+import RoundsLab from "../explore/RoundsLab";
 import { Clean, Models, RawData } from "../pipeline/Pages";
 import Pipeline from "../pipeline/Pipeline";
 import { Measure, Results } from "../results/Results";
@@ -18,6 +19,7 @@ export default function Panel({ exp }: { exp: string | null }) {
   const page = useUi((u) => u.page);
   const full = useUi((u) => u.full);
   const watching = useUi((u) => u.lab.live);
+  const learning = useUi((u) => u.lab.rounds);
 
   let body: JSX.Element;
   if (!s || page === "none") {
@@ -34,7 +36,7 @@ export default function Panel({ exp }: { exp: string | null }) {
     );
   } else if (page === "lab") {
     // while a run's models gate the files, the lab shows them at work instead
-    body = watching ? <LiveLab s={s} /> : <DataLab s={s} />;
+    body = watching ? <LiveLab s={s} /> : learning ? <RoundsLab lab={learning} /> : <DataLab s={s} />;
   } else {
     const P = { flow: Pipeline, results: Results, measure: Measure, models: Models, clean: Clean, data: RawData }[page];
     body = <div className={`ws-page${page === "flow" ? " flow-page" : ""}`} id={`pg-${page}`}><P s={s} /></div>;

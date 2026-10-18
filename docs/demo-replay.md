@@ -47,3 +47,24 @@ In the app, on "mouse mo280 four organs":
 
 Between takes, go back with `POST /labs/mo280/models/v001/current`. Each Retrain moves one version on;
 when there is none left, it says so.
+
+## Watch the models learn (rounds view)
+
+This needs no model files. It reads the numbers of a fine-tuning run recorded earlier: each version's %
+against the expert's, gate by gate, on samples no version was taught. It plays the rounds, v001 (the
+human models) → v002 → v003 → v004:
+- the mean error falls (lab mo280: 25.09 → 5.32 → 4.00 → 1.35 pp, against 3.00 for template copy);
+- a curve per tissue;
+- every gate's dot moves onto the expert's line. Pick one never-taught sample on the left to see its
+  gates, or "Every sample" for each gate's mean error.
+
+Load GJ's run once:
+
+```bash
+cd flow-er-demo/backend
+uv run python -m flow_er.workspace.rounds ~/Downloads/loop_comparison/mouse_lab_mo280 mo280
+```
+
+This writes `models/rounds/mo280.json` (outside git). Open the view from the data lab's top bar or the
+model step's panel: "Watch the models learn". It plays once by itself (about 3 s a round). Click a
+round to hold it, or press Play again.

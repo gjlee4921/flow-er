@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { api, type ExperimentState, type GateNode } from "../../api";
-import { refresh, useGates, useModels, usePlot, useSamples, useToolkit, useViews } from "../../api/hooks";
+import { refresh, useGates, useModels, usePlot, useRounds, useSamples, useToolkit, useViews } from "../../api/hooks";
 import { Bloom, Flower, Icon, Mark } from "../../components/icons";
 import { LabHist, LabPlot, ViewChart } from "../../components/plots";
 import { Resizer, widthOf } from "../../components/Resizer";
@@ -22,6 +22,7 @@ export default function DataLab({ s }: { s: ExperimentState }) {
   const lab = useUi((u) => u.lab);
   const { data: meta } = useSamples(s.id);
   const { data: models } = useModels();
+  const { data: learnable } = useRounds();
   const samples = meta?.samples ?? [];
   const channels = meta?.channels ?? [];
   const sample = lab.sample ?? samples[0]?.id;
@@ -236,6 +237,10 @@ export default function DataLab({ s }: { s: ExperimentState }) {
         <div className="lt-r">
           <button className={`btn sm lab-ask-btn${lab.ask ? " on" : " plain"}`} id="lab-ask" aria-pressed={lab.ask} title="The lab assistant: ask for any view of the events (⌘J)"
             onClick={() => ui.lab({ ask: !lab.ask })}><Bloom p={1} className="sm" /><span>Ask</span></button>
+          {!!learnable?.labs.length && (
+            <button className="btn sm" id="lab-rounds" title="How the lab's models got better, round by round, on samples they were never taught"
+              onClick={() => ui.lab({ rounds: learnable.labs[0] })}>Watch the models learn</button>
+          )}
           <button className="btn sm ink" id="lab-autogate" disabled={!models?.available || !sample || gating} title={models?.message} onClick={gateThis}>
             {gating ? "Gating…" : "Gate with the lab's models"}</button>
         </div>

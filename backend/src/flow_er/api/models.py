@@ -124,6 +124,23 @@ def lab_models(lab_name: str) -> dict:
         raise HTTPException(404, f"no models for lab {lab_name}: {e}") from e
 
 
+@router.get("/rounds")
+def rounds_available() -> dict:
+    """Labs with a recorded fine-tuning run to show round by round (demo)."""
+    from flow_er.workspace import rounds
+    return {"labs": rounds.available()}
+
+
+@router.get("/labs/{lab_name}/rounds")
+def lab_rounds(lab_name: str) -> dict:
+    """A lab's models round by round: each version's % against the expert's on samples never taught."""
+    from flow_er.workspace import rounds
+    data = rounds.get(lab_name)
+    if data is None:
+        raise HTTPException(404, f"no recorded rounds for lab {lab_name}")
+    return data
+
+
 @router.post("/labs/{lab_name}/models/{version}/current")
 def lab_set_current(lab_name: str, version: str) -> dict:
     """Roll back (or forward) to an existing version."""
