@@ -5,8 +5,8 @@ import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api";
 import { useLabModels, useMemory, useModels, useSettings } from "../../api/hooks";
-import { Bloom, Icon, Mark } from "../../components/icons";
-import { ui, useUi } from "../../lib";
+import { Bloom, Icon, Me } from "../../components/icons";
+import { ME, ui, useUi } from "../../lib";
 
 const STATE = { live: "Live", outdated: "Needs retraining", offline: "Offline" } as const;
 
@@ -51,7 +51,7 @@ export default function SettingsPanel() {
           <h2 id="set-h">Settings</h2>
           <button className="ib sm" aria-label="Close" onClick={close}><Icon.close /></button>
         </header>
-        <div className="set-me"><Mark /><div><b>Will</b><span>flow-er on this machine</span></div></div>
+        <div className="set-me"><Me name={ME.name} /><div><b>{ME.name}</b><span>flow-er on this machine · your flower is drawn from your name</span></div></div>
 
         <section className="set-sec">
           <h3>What flow-er remembers</h3>

@@ -5,8 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { api, type ExperimentState, type Step } from "../../api";
 import { refresh, useAutogateFiles, useExperiment, useExperiments } from "../../api/hooks";
-import { Bloom, Flower, Icon, Mark } from "../../components/icons";
-import { ui, useUi, type Page, type Place } from "../../lib";
+import { Bloom, Flower, Icon, Me } from "../../components/icons";
+import { ME, ui, useUi, type Page, type Place } from "../../lib";
 
 type Lane = { id: string; n: number; title: string; page: Page; kinds: string[] };
 const LANES: Lane[] = [
@@ -224,7 +224,7 @@ export default function Rail({ exp }: { exp: string | null }) {
     <aside className="ws-rail" id="ws-rail" aria-label="Navigator">
       <div className="rail-top">
         <button className="brand-me" title="Settings and what flow-er remembers" aria-label="Settings" onClick={() => ui.set({ settingsOpen: true })}>
-          <Mark /><span className="me-badge" aria-hidden="true">W</span></button>
+          <Me name={ME.name} /></button>
         <ProjectMenu exp={exp} title={s?.title ?? "flow-er"} sub={s ? `${s.snapshot.samples.length} files · ${s.snapshot.channels.length} channels` : "Nothing open yet"} />
         <span className="rail-acts">
           <button className="ib sm" aria-label="Start another analysis" title="Start another analysis" onClick={() => { ui.openProject(null); ui.set({ dock: "open" }); }}><Icon.plus /></button>

@@ -10,6 +10,9 @@ export function ago(iso?: string | null) {
   return days <= 0 ? "today" : days === 1 ? "yesterday" : days < 14 ? `${days} days ago` : iso.slice(0, 10);
 }
 
+/** Who is using flow-er on this machine (no accounts yet): their name draws their flower. */
+export const ME = { name: "Will" };
+
 export const fmt = (n: number, d = 0) =>
   Number(n).toLocaleString("en-GB", { minimumFractionDigits: d, maximumFractionDigits: d });
 export const clamp = (x: number, a: number, b: number) => Math.max(a, Math.min(b, x));

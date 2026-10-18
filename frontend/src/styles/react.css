@@ -610,26 +610,24 @@ input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="r
 .ws.minirail .ws-body { grid-template-columns: 60px minmax(0, 1fr); }
 .mini-rail { display: flex; flex-direction: column; align-items: center; gap: 8px; min-height: 0; padding: 12px 0 14px; background: var(--sidebar); border-right: 1px solid var(--sep); }
 .mr-me { all: unset; position: relative; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 11px; cursor: pointer; transition: background .15s; }
-.mr-me .glyph { width: 28px; height: 28px; border-radius: 9px; }
-.mr-me .glyph .fl { width: 20px; height: 20px; }
 .mr-me:hover, .mr-me:focus-visible { background: var(--hover); outline: none; }
-.mr-me .me-badge { position: absolute; right: -1px; bottom: -1px; width: 15px; height: 15px; border-radius: 50%; display: grid; place-items: center; font-size: 8.5px; font-weight: 700; color: var(--text-2); background: var(--raised); box-shadow: 0 0 0 1.5px var(--sidebar), 0 1px 2px rgba(0,0,0,.12); }
 .mr-ic { all: unset; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; color: var(--text-2); cursor: pointer; }
 .mr-ic:hover, .mr-ic:focus-visible { background: var(--hover); color: var(--text); }
 .mr-ic .i { width: 16px; height: 16px; }
 .mr-sep { width: 24px; height: 1px; background: var(--sep-2); margin: 2px 0; flex: none; }
-.mr-projs { flex: 1; min-height: 0; width: 100%; overflow-y: auto; scrollbar-width: none; display: flex; flex-direction: column; align-items: center; gap: 9px; padding: 3px 0 6px; }
+.mr-projs { flex: 1; min-height: 0; width: 100%; overflow-y: auto; scrollbar-width: none; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 4px 0 6px; }
 .mr-projs::-webkit-scrollbar { display: none; }
-.mr-proj { all: unset; box-sizing: border-box; position: relative; flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; cursor: pointer;
-  font-size: 12px; font-weight: 650; letter-spacing: .02em; color: hsl(var(--h) 35% 30%); background: hsl(var(--h) 60% 92%);
-  box-shadow: 0 0 0 2px var(--sidebar), 0 0 0 3.5px transparent; transition: transform .15s var(--ease), box-shadow .15s; }
-.mr-proj.plan { box-shadow: 0 0 0 2px var(--sidebar), 0 0 0 3.5px #8fae98; }
-.mr-proj.fig { box-shadow: 0 0 0 2px var(--sidebar), 0 0 0 3.5px var(--fl); }
-.mr-proj:hover, .mr-proj:focus-visible { transform: scale(1.08); outline: none; }
-.mr-proj.on { color: var(--on-ink); background: var(--ink); }
-.mr-add { all: unset; flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; color: var(--text-2); border: 1.5px dashed var(--sep-2); cursor: pointer; transition: background .15s, color .15s, border-color .15s; }
+.mr-proj { all: unset; box-sizing: border-box; position: relative; flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; cursor: pointer;
+  font-size: 10px; font-weight: 650; letter-spacing: .02em; color: color-mix(in srgb, var(--fl-core) 80%, var(--text));
+  background: color-mix(in srgb, var(--fl) var(--tint), var(--raised));
+  box-shadow: 0 0 0 2px var(--sidebar), 0 0 0 3px var(--sep-2); transition: transform .15s var(--ease), box-shadow .15s, background .15s; }
+.mr-proj .fl { width: 20px; height: 20px; vertical-align: 0; }
+.mr-proj:hover, .mr-proj:focus-visible { transform: scale(1.1); outline: none; background: color-mix(in srgb, var(--fl) calc(var(--tint) + 12%), var(--raised)); }
+.mr-proj.on { background: var(--fl-core); box-shadow: 0 0 0 2px var(--sidebar), 0 0 0 3px var(--fl-core); }
+.mr-proj.on .fl { color: #fff; } .mr-proj.on .fl .co { fill: #fff; }
+.mr-add { all: unset; flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; color: var(--text-2); border: 1.5px dashed var(--sep-2); cursor: pointer; transition: background .15s, color .15s, border-color .15s; }
 .mr-add:hover, .mr-add:focus-visible { background: var(--hover); color: var(--fl-core); border-color: var(--sel-line); }
-.mr-add .i { width: 16px; height: 16px; }
+.mr-add .i { width: 14px; height: 14px; }
 .mr-tip { position: fixed; z-index: 70; transform: translateY(-50%); pointer-events: none; display: grid; gap: 2px; min-width: 180px; max-width: 280px; padding: 9px 12px; border-radius: 12px;
   background: var(--pop); backdrop-filter: blur(20px) saturate(1.6); -webkit-backdrop-filter: blur(20px) saturate(1.6); box-shadow: var(--shadow-pop); font-size: 12px; color: var(--text-3); animation: in .14s var(--ease); }
 .mr-tip b { font-size: 13.5px; font-weight: 600; color: var(--text); }
@@ -671,3 +669,10 @@ button.brand-me:focus-visible { outline: 2px solid var(--fl-core); outline-offse
 .set-mem .none { list-style: none; margin-left: -18px; color: var(--text-3); }
 .set-acts { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .set-panel footer code { font-size: 11.5px; overflow-wrap: anywhere; }
+
+/* your own flower (Me) */
+.me-av { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; flex: none;
+  background: color-mix(in srgb, var(--fl) 14%, var(--raised)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fl) 30%, transparent); }
+.me-av .own { width: 25px; height: 25px; }
+.rail-top .me-av { width: 26px; height: 26px; } .rail-top .me-av .own { width: 22px; height: 22px; }
+.set-me .me-av { width: 40px; height: 40px; } .set-me .me-av .own { width: 34px; height: 34px; }

@@ -76,6 +76,40 @@ export function Bloom({ p, className = "" }: { p: number; className?: string }) 
   );
 }
 
+// ---- a flower of one's own, instead of initials -------------------------------------------
+
+/** [petal, second petal, core] shades from the flower palette */
+const OWN = [["#d77f9c", "#f2c4d3", "#9e3f62"], ["#c0577c", "#ecb3c6", "#7d2f4b"], ["#d77f9c", "#b9d3bf", "#9e3f62"],
+  ["#b56d8c", "#f3d4c0", "#7d3b57"], ["#e39aae", "#cfc3e6", "#a9506f"], ["#c86a86", "#f1dfa6", "#8a3a56"]];
+
+/** A person's own flower, drawn from their name: 5-8 petals, round or pointed, two shades from the
+ *  palette and a turn. The same name always gives the same flower; different names rarely match. */
+export function OwnFlower({ name, className = "" }: { name: string; className?: string }) {
+  let h = 2166136261;
+  for (const c of name) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; }
+  const n = 5 + (h % 4);
+  const [a, b, core] = OWN[(h >>> 3) % OWN.length];
+  const pointed = (h >>> 7) % 2 === 1;
+  const turn = (h >>> 9) % 60;
+  return (
+    <svg className={`own ${className}`} viewBox="2 0 36 36" aria-hidden="true">
+      {Array.from({ length: n }, (_, i) => {
+        const t = `rotate(${turn + (i * 360) / n} 20 18)`;
+        const fill = i % 2 ? b : a;
+        return pointed
+          ? <path key={i} d="M20 18C16.2 13.4 16.6 6.6 20 3.4C23.4 6.6 23.8 13.4 20 18Z" fill={fill} transform={t} />
+          : <ellipse key={i} cx="20" cy="10.6" rx={n > 6 ? 4 : 4.8} ry="7" fill={fill} opacity=".92" transform={t} />;
+      })}
+      <circle cx="20" cy="18" r="3.3" fill={core} />
+    </svg>
+  );
+}
+
+/** Who is signed in, drawn as their own flower. */
+export function Me({ name }: { name: string }) {
+  return <span className="me-av" aria-hidden="true"><OwnFlower name={name} /></span>;
+}
+
 export function Mark({ small = false }: { small?: boolean }) {
   return <span className={`glyph brand${small ? " sm" : ""}`} aria-hidden="true"><Bloom p={1} className="head" /></span>;
 }

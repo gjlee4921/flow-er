@@ -1,26 +1,23 @@
-// The sidebar folded to a strip: the profile (settings) on top, one circle per project (hover for its
-// title and status, click to open it) and + for a new analysis. On the start page it is all there is;
+// The sidebar folded to a strip: your own flower (settings) on top, one circle per project, its flower
+// as far opened as the project has come (hover for its title and status, click to open it), and + for a
+// new analysis. On the start page it is all there is;
 // inside a project it unfolds into the full navigator (Rail).
 import { useState } from "react";
 import type { Experiment } from "../../api";
 import { useExperiments } from "../../api/hooks";
-import { Icon, Mark } from "../../components/icons";
-import { ago, ui } from "../../lib";
+import { Bloom, Icon, Me } from "../../components/icons";
+import { ago, ME, ui } from "../../lib";
 
-/** Two letters: the first word's initial, then the last word's number or initial ("als ics screen4" -> A4). */
-function initials(title: string) {
-  const w = title.split(/[\s_-]+/).filter(Boolean);
-  if (!w.length) return "?";
-  const last = w[w.length - 1];
-  const second = w.length > 1 ? (last.match(/\d+$/)?.[0].slice(-1) ?? last[0]) : (w[0][1] ?? "");
-  return (w[0][0] + second).toUpperCase();
-}
+/** How far a project has come, as a flower opening: a bud before a plan, half open with a kept plan,
+ *  in full bloom once it has figures. */
+const progress = (p: Experiment) => (p.figures ? 1 : p.plan_kept ? 0.6 : 0.22);
 
-/** A steady colour per project, so its circle is recognisable from one visit to the next. */
-function hue(id: string) {
+/** A steady shade of the flower pink per project (10-38%), so its circle is recognisable from one
+ *  visit to the next while staying in the app's palette. */
+function tint(id: string) {
   let h = 0;
-  for (const c of id) h = (h * 31 + c.charCodeAt(0)) % 360;
-  return h;
+  for (const c of id) h = (h * 31 + c.charCodeAt(0)) % 997;
+  return `${10 + (h % 8) * 4}%`;
 }
 
 export const projectStatus = (p: Experiment) =>
@@ -39,7 +36,7 @@ export default function MiniRail({ exp }: { exp: string | null }) {
   return (
     <aside className="mini-rail" id="ws-rail" aria-label="Projects">
       <button className="mr-me" aria-label="Settings" title="Settings and what flow-er remembers" onClick={() => ui.set({ settingsOpen: true })}>
-        <Mark /><span className="me-badge" aria-hidden="true">W</span>
+        <Me name={ME.name} />
       </button>
       {exp && (
         <button className="mr-ic" aria-label="Show the project's sidebar" title="Show the project's sidebar" onClick={() => ui.set({ railOpen: true })}><Icon.sidebar /></button>
@@ -47,12 +44,12 @@ export default function MiniRail({ exp }: { exp: string | null }) {
       <span className="mr-sep" aria-hidden="true" />
       <nav className="mr-projs" aria-label="Projects">
         {live.map((p) => (
-          <button key={p.id} className={`mr-proj${p.figures ? " fig" : p.plan_kept ? " plan" : ""}${p.id === exp ? " on" : ""}`}
-            style={{ ["--h" as any]: hue(p.id) }} aria-label={`${p.title}: ${projectStatus(p)}`} aria-current={p.id === exp}
+          <button key={p.id} className={`mr-proj${p.id === exp ? " on" : ""}`}
+            style={{ ["--tint" as any]: tint(p.id) }} aria-label={`${p.title}: ${projectStatus(p)}`} aria-current={p.id === exp}
             onMouseEnter={(e) => show(p, e.currentTarget)} onMouseLeave={() => setTip(null)}
             onFocus={(e) => show(p, e.currentTarget)} onBlur={() => setTip(null)}
             onClick={() => { setTip(null); if (p.id !== exp) ui.openProject(p.id); }}>
-            {initials(p.title)}
+            <Bloom p={progress(p)} />
           </button>
         ))}
         <button className="mr-add" aria-label="New analysis" title="New analysis"
