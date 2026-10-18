@@ -10,7 +10,7 @@ import { Bloom, Flower, Icon, Mark } from "../../components/icons";
 import { LabHist, LabPlot, ViewChart } from "../../components/plots";
 import { Resizer, widthOf } from "../../components/Resizer";
 import { fmt, POP, shortSample, ui, useUi, type LabState } from "../../lib";
-import { askInChat } from "../agent/Chat";
+import { sendInChat } from "../agent/Chat";
 import LabAgent from "./LabAgent";
 import LabSheet, { sheetCsv } from "./LabSheet";
 
@@ -85,7 +85,7 @@ export default function DataLab({ s }: { s: ExperimentState }) {
   const figId = lab.fig ?? null;
   const setFigId = (id: string | null) => ui.lab({ fig: id });
   const fig = saved.find((v) => v.spec.id === figId);
-  const askForFigure = () => { ui.leaveLab(); askInChat("Draw "); };
+  const askForFigure = () => { ui.leaveLab(); sendInChat("Draw a figure that answers the experiment's question"); };
   const lead = (v: (typeof saved)[number]) => (v.spec.caption ? `${v.spec.caption.split(". ")[0].replace(/\.$/, "")}.` : `From ${v.spec.table}.`);
 
   const name = (id?: string) => channels.find((c) => c.id === id)?.name ?? id ?? "";

@@ -17,7 +17,7 @@ import {
 import { DensityImage } from "../../components/plots/DensityImage";
 import { Flower, Icon } from "../../components/icons";
 import { clamp, fmt, ui, useUi } from "../../lib";
-import { askInChat } from "../agent/Chat";
+import { askInChat, sendInChat } from "../agent/Chat";
 
 const COLS = ["source", "macro", "model", "measure", "view"] as const;
 const COL_NAME: Record<string, string> = { source: "Raw data", macro: "Clean up", model: "Learned models", measure: "Measure", view: "Results" };
@@ -189,7 +189,7 @@ function Canvas({ s }: { s: ExperimentState }) {
           <h2>No analysis planned yet</h2>
           <p>Tell me in the chat what the experiment is for. I will lay the analysis out here as steps: arithmetic as macros, judgement calls as models, then the measurements and the figures.</p>
         </div>
-        <button className="btn ink big-btn" onClick={() => askInChat("Plan the analysis")}>Plan the analysis</button>
+        <button className="btn ink big-btn" onClick={() => sendInChat("Plan the analysis")}>Plan the analysis</button>
       </div>
     );
   }
@@ -215,9 +215,10 @@ function Canvas({ s }: { s: ExperimentState }) {
             {running ? <Flower className="sm" /> : <Icon.play />}{running ? `Running ${doneCount} of ${Object.keys(live!.nodes).length}` : "Run workflow"}
           </button>
           <button className={`btn sm${showRuns ? " on" : ""}`} id="flow-runs" onClick={() => setShowRuns(!showRuns)}>Runs{history.length ? ` · ${history.length}` : ""}</button>
-          <label className="flow-switch" title="Run the workflow on its own when new FCS files arrive in the data folder">
-            <input type="checkbox" id="flow-active" checked={!!s.active} onChange={toggleActive} /><span>On new files</span>
-          </label>
+          <button className={`flow-switch${s.active ? " on" : ""}`} id="flow-active" role="switch" aria-checked={!!s.active} onClick={toggleActive}
+            title="Run the workflow on its own when new FCS files arrive in the data folder">
+            <i className="sw" aria-hidden="true" /><span>{s.active ? "Runs on new files" : "Run on new files"}</span>
+          </button>
           <button className="btn sm" onClick={() => askInChat("Add a step that ")}>+ Add a step</button>
         </Panel>
       </ReactFlow>
@@ -479,9 +480,8 @@ function NodePanel({ s, card, draft, onClose, onRun, run }: { s: ExperimentState
       </div>
       {!draft && (
         <div className="np-run">
-          <button className="btn sm ink" onClick={() => onRun("only", step.id)}><Icon.play />Run this step</button>
-          <button className="btn sm" onClick={() => onRun("to", step.id)}>Run to here</button>
-          <button className="btn sm" onClick={() => onRun("from", step.id)}>Run from here</button>
+          {/* one button: the step, and anything before it that changed (unchanged steps are reused) */}
+          <button className="btn sm ink" onClick={() => onRun("to", step.id)} title="Runs this step, and any step before it that changed; unchanged steps are reused"><Icon.play />Run this step</button>
         </div>
       )}
     </aside>

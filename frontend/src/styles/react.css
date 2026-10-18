@@ -362,8 +362,15 @@
 .flow-tools .btn .i { width: 13px; height: 13px; }
 .flow-tools .btn.ink { display: inline-flex; align-items: center; gap: 6px; }
 .flow-tools .btn.on { background: var(--fill); }
-.flow-switch { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--sep-2); border-radius: var(--r-ctl); background: var(--raised); font-size: 12.5px; color: var(--text-2); cursor: pointer; }
-.flow-switch input { accent-color: var(--fl-core); }
+/* a switch, not a checkbox: a rounded-rectangle track (never a pill) that turns flower pink when on */
+.flow-switch { all: unset; display: inline-flex; align-items: center; gap: 8px; padding: 4px 10px 4px 7px; border: 1px solid var(--sep-2); border-radius: var(--r-ctl); background: var(--raised); font-size: 12.5px; color: var(--text-2); cursor: pointer; transition: background .15s, border-color .15s; }
+.flow-switch:hover { background: var(--hover); }
+.flow-switch .sw { position: relative; flex: none; width: 26px; height: 16px; border-radius: 5px; background: var(--fill); box-shadow: inset 0 0 0 1px var(--sep-2); transition: background .15s; }
+.flow-switch .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 3px; background: var(--raised); box-shadow: 0 1px 2px rgba(0,0,0,.22); transition: transform .18s var(--ease); }
+.flow-switch.on { color: var(--text); background: var(--sel); border-color: var(--sel-line); }
+.flow-switch.on .sw { background: var(--fl-core); box-shadow: none; }
+.flow-switch.on .sw::after { transform: translateX(10px); }
+.flow-switch:focus-visible { outline: 2px solid var(--fl-core); outline-offset: 2px; }
 .flow-banner .link { all: unset; cursor: pointer; text-decoration: underline; color: var(--text); margin-left: 4px; }
 .runs-panel { position: absolute; top: 60px; right: 12px; bottom: 12px; width: 280px; background: var(--raised); border: 1px solid var(--sep-2); border-radius: 14px; box-shadow: var(--shadow-pop); z-index: 6; display: flex; flex-direction: column; overflow: hidden; }
 .runs-list { overflow-y: auto; padding: 6px; display: grid; gap: 2px; align-content: start; }
@@ -433,3 +440,25 @@
 .ag-models li { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; color: var(--text-2); }
 .ag-models li small { color: var(--text-3); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ag-models li.on > span:first-child { font-weight: 600; color: var(--text); }
+
+/* Selected things wear the flower pink: the page you are on, the gate, file or step you picked, the tab
+   you are in. Data keeps its own colours; pink only says "this one". */
+:root { --sel: color-mix(in srgb, var(--fl) 15%, transparent); --sel-hover: color-mix(in srgb, var(--fl) 22%, transparent); --sel-line: color-mix(in srgb, var(--fl-core) 55%, var(--sep-2)); }
+.pnav[aria-current="true"], .si[aria-current="true"] { background: var(--sel); }
+.pnav[aria-current="true"] .pic { color: var(--fl-core); }
+.n-row[aria-selected="true"] { background: var(--sel); }
+.n-row[aria-selected="true"]:hover { background: var(--sel-hover); }
+.flow-rf .react-flow__node.selected .node, .flow-rf .node.sel, .node.sel { border-color: var(--fl-core); box-shadow: 0 0 0 3px var(--sel), var(--shadow); }
+.np-tab[aria-selected="true"] { border-bottom-color: var(--fl-core); }
+.lt-views .n-tab[aria-selected="true"] { box-shadow: inset 0 -2px 0 var(--fl-core); }
+.across .ab.on { background: var(--sel); }
+.ds-card.on { border-color: var(--fl-core); box-shadow: 0 0 0 3px var(--sel); }
+.run-item.on, .flow-tools .btn.on { background: var(--sel); }
+.n-tbl tbody tr[aria-selected="true"] td { background: var(--sel); }
+.rp-outline a.on { background: var(--sel); }
+.lab-cell.on { box-shadow: 0 0 0 2px var(--fl-core); }
+/* the box you are typing in, or the menu you have open, rings in the same pink */
+.composer:focus-within { border-color: var(--sel-line); box-shadow: 0 0 0 3px var(--sel), var(--shadow); }
+.composer.over { border-color: var(--fl-core); box-shadow: 0 0 0 3px var(--sel); }
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):focus-visible, select:focus-visible, .ctx textarea:focus {
+  outline: none; border-color: var(--fl-core); box-shadow: 0 0 0 3px var(--sel); }

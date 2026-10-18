@@ -9,7 +9,7 @@ import { useReport, type BoundNumber, type Segment } from "../../api/report";
 import { Tip, useTip, ViewChart } from "../../components/plots";
 import { clearSelection, useSelectionLabel } from "../../components/plots/selection";
 import { esc, fmt, ui } from "../../lib";
-import { askInChat } from "../agent/Chat";
+import { askInChat, sendInChat } from "../agent/Chat";
 import { GatingStrategy } from "./GatingStrategy";
 import "../../styles/report.css";
 
@@ -149,7 +149,7 @@ export function Report({ s }: { s: ExperimentState }) {
             : <div className="empty-in"><p>{measured
                 ? "The agent writes the title and summary from the kept tables. Every number in them points at a table cell."
                 : "Nothing is measured yet. Run the plan's measure step, then ask for the summary."}</p>
-                <button className="btn sm" onClick={() => askInChat(measured ? "Write the results summary" : "Run the plan")}>{measured ? "Write the summary" : "Run the plan"}</button></div>}
+                <button className="btn sm" onClick={() => sendInChat(measured ? "Write the results summary" : "Run the plan")}>{measured ? "Write the summary" : "Run the plan"}</button></div>}
         </section>
 
         <section id="rp-figures">
@@ -160,8 +160,8 @@ export function Report({ s }: { s: ExperimentState }) {
           {views.length
             ? views.map((v, i) => <Figure key={v.spec.id + (v.draft ? "-d" : "")} v={v} n={i + 1} onDecide={decide} />)
             : <div className="empty-in"><p>No figures yet. Say what you want to compare, and the agent draws it from a saved table.</p>
-                <button className="btn sm" onClick={() => askInChat("Draw ")}>Ask for a figure</button></div>}
-          {!!views.length && <button className="btn sm plain ask-more" onClick={() => askInChat("Draw ")}>Ask for another figure</button>}
+                <button className="btn sm" onClick={() => sendInChat("Draw a figure that answers the experiment's question")}>Ask for a figure</button></div>}
+          {!!views.length && <button className="btn sm plain ask-more" onClick={() => sendInChat("Draw another figure for the question, one that shows something the kept figures do not")}>Ask for another figure</button>}
         </section>
 
         <section id="rp-methods">

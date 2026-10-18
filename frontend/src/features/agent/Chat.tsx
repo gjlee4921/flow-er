@@ -143,8 +143,11 @@ export default function Chat({ exp }: { exp: string }) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const focus = (e: Event) => { const t = (e as CustomEvent<string>).detail; if (t) setText(t); input.current?.focus(); };
+    // a button whose ask is complete sends it straight away, as a suggestion does
+    const go = (e: Event) => { const t = (e as CustomEvent<string>).detail; if (t) sendNow.current(t); };
     window.addEventListener("flower:ask", focus);
-    return () => window.removeEventListener("flower:ask", focus);
+    window.addEventListener("flower:send", go);
+    return () => { window.removeEventListener("flower:ask", focus); window.removeEventListener("flower:send", go); };
   }, []);
 
   const send = async (raw: string) => {
@@ -181,6 +184,8 @@ export default function Chat({ exp }: { exp: string }) {
       setPending(null);
     }
   };
+  const sendNow = useRef(send);
+  sendNow.current = send;
 
   const decide = async (keep: boolean) => {
     try { keep ? await api.keep(exp) : await api.undo(exp); ui.toast(keep ? "Kept" : "Dropped"); }
@@ -254,5 +259,7 @@ export default function Chat({ exp }: { exp: string }) {
   );
 }
 
-/** Put words in the composer from anywhere on the screen. */
+/** Put words in the composer from anywhere on the screen, for an ask the scientist finishes ("Add a step that "). */
 export const askInChat = (text = "") => window.dispatchEvent(new CustomEvent("flower:ask", { detail: text }));
+/** Send a complete ask from anywhere on the screen, without a trip to the send button. */
+export const sendInChat = (text: string) => window.dispatchEvent(new CustomEvent("flower:send", { detail: text }));
