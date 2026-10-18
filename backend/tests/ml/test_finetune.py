@@ -100,3 +100,13 @@ def test_retrain_promotes_or_keeps_and_rolls_back(tmp_path):
     assert out2["version"] == "v002" and out2["graduated"] == []
     registry.set_current("lab1", "v001")                  # rollback
     assert registry.current_version("lab1") == "v001"
+
+
+def test_small_lab_still_holds_out_one_individual():
+    from flow_er.ml.finetune import held_out, role_of
+    people = {f"donor-{i}" for i in range(40)}
+    in_share = {p for p in people if role_of(p) == "val"}
+    assert held_out(people) == in_share and in_share          # normal labs: the hash share
+    few = sorted(people - in_share)[:3]
+    assert len(held_out(set(few))) == 1                       # none in the share: fall back to one
+    assert held_out({few[0]}) == set()                        # one person: nothing to hold out

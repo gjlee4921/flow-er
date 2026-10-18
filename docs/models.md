@@ -125,14 +125,14 @@ ml.set_current("als", "v001")  # rollback
 - **Starting point:** the lab's current shared model, else the base model, else the ImageNet encoder.
 - **Training:** on all the lab's accepted examples, new and old (replay), at lr 1e-4. Early stopping with patience 40 on the held-out individuals' Dice. Drift augmentation is on.
 - **Graduation:** a gate with ≥ 15 accepted samples also gets its own per-gate UNITO. It's kept only if it beats the shared model on that gate.
-- **Promotion:** the new version becomes current only if the held-out mean frequency error is lower than with the current models (or template copy, for a new lab), and no gate is more than 1 pp worse. Otherwise it's stored as a candidate and the old version stays current. The code decides; nothing else does.
+- **Promotion:** the new version becomes current only if the held-out mean frequency error is lower than with what the router uses now (for a new lab: the base model, or template copy without one), and no gate is more than 1 pp worse. Otherwise it's stored as a candidate and the old version stays current. The code decides; nothing else does.
 - **Output:** a version folder `models/labs/<lab>/<version>/` holding the shared model, any graduated per-gate models, `version.json` (metrics, the training sample ids, the parent version, the decision and its reason), and the `current` pointer.
 
 **To enable it for a lab you need:**
 1. The ML packages installed: `uv sync --group ml`.
 2. A template for the lab, stored by the app.
 3. An individual id for every uploaded sample (person or animal). Without it, held-out samples could come from people who are also in training.
-4. At least a few individuals: with fewer than about five, the 20% rule may hold none out, and `retrain` stops with a clear error.
+4. Accepted samples from at least 2 individuals. When none of a small lab's individuals falls in the 20% share, `retrain` holds out one of them (the same one each time, chosen by hash).
 5. Optionally, the base model in `models/base/shared`, so a new lab starts from it instead of from ImageNet weights.
 
 ## 4. Where training runs: CPU or GPU, and Colab

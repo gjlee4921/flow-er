@@ -5,7 +5,8 @@ add_labels: a user accepted (or corrected) the gates of one sample -> training e
   polygons (cascade); each accepted gate becomes one example: parent density, accepted polygon
   as the mask, the lab template, and (cytokine gates) the donor's unstimulated well.
   An individual is held out (role "val") when its hash falls in VAL_SHARE, so held-out
-  individuals stay held out as labels accumulate.
+  individuals stay held out as labels accumulate; a small lab with none in that share holds out
+  the individual with the smallest hash (assign_roles, run by retrain).
 retrain: a new version that starts from the lab's current shared model (or the base model),
   trains on ALL the lab's examples (replay) at LR with early stopping on the held-out
   individuals, and graduates gates with >= GRADUATE accepted samples to their own UNITO.
@@ -38,10 +39,37 @@ def lab_dataset(lab: str) -> str:
     return f"lab_{lab}"
 
 
+def _hash(individual: str) -> int:
+    return int(hashlib.sha256(individual.encode()).hexdigest()[:8], 16) % 1000
+
+
 def role_of(individual: str) -> str:
     """'val' for a fixed VAL_SHARE of individuals (by hash), else 'train'."""
-    h = int(hashlib.sha256(individual.encode()).hexdigest()[:8], 16)
-    return "val" if (h % 1000) < VAL_SHARE * 1000 else "train"
+    return "val" if _hash(individual) < VAL_SHARE * 1000 else "train"
+
+
+def held_out(individuals: set[str]) -> set[str]:
+    """The held-out individuals: those in the hash share; if none of them is (small labs), the
+    one with the smallest hash, so there is always something to compare on with >= 2 people."""
+    val = {i for i in individuals if role_of(i) == "val"}
+    if not val and len(individuals) >= 2:
+        val = {min(individuals, key=_hash)}
+    return val
+
+
+def assign_roles(lab: str) -> set[str]:
+    """Write each lab example's role (train / val) from held_out(); returns the held-out set."""
+    from flow_er.ml.unet import dataset as ds
+
+    dataset = lab_dataset(lab)
+    items = ds.select(dataset, ["train", "val"])
+    val = held_out({it.meta["individual"] for it in items})
+    for it in items:
+        role = "val" if it.meta["individual"] in val else "train"
+        if it.meta["roles"].get(dataset) != role:
+            it.meta["roles"][dataset] = role
+            it.path.with_suffix(".json").write_text(json.dumps(it.meta, indent=1))
+    return val
 
 
 # --- labels -------------------------------------------------------------------------------------
@@ -177,11 +205,12 @@ def retrain(lab: str, lr: float = LR, patience: int = PATIENCE, epochs: int = EP
     from flow_er.ml.unet import train
 
     evaluation = lab_dataset(lab)
+    assign_roles(lab)
     train_items = ds.select(evaluation, ["train"])
     val_items = ds.select(evaluation, ["val"])
     if not train_items or not val_items:
         raise ValueError(f"lab {lab!r}: {len(train_items)} training and {len(val_items)} held-out "
-                         "examples; need both (the held-out share is by individual)")
+                         "examples; retraining needs accepted samples from at least 2 individuals")
     current = registry.current_version(lab)
     info = registry.version_info(lab) if current else None
     base = registry.models_root() / "base" / "shared"
@@ -195,8 +224,9 @@ def retrain(lab: str, lr: float = LR, patience: int = PATIENCE, epochs: int = EP
 
     channels = ds.SHARED_CHANNELS
     arch = shared_arch or unet_model.shared_arch(len(channels), None if init else "imagenet")
-    if init:      # fine-tune: the architecture is the starting model's
-        arch = json.loads((Path(init) / "recipe.json").read_text())["arch"]
+    if init:      # fine-tune: the starting model's architecture; its weights come from model.pt
+        arch = {**json.loads((Path(init) / "recipe.json").read_text())["arch"],
+                "encoder_weights": None}
     out = train.train(train.Config(model="_candidate", arch=arch, channels=channels,
                                    init=str(init) if init else None, augment=ds.Augment(),
                                    out_name=version, **common), log=log)
