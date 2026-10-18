@@ -7,8 +7,10 @@ import { Icon } from "./components/icons";
 import { Resizer, widthOf } from "./components/Resizer";
 import Chat from "./features/agent/Chat";
 import MemoryPanel from "./features/shell/MemoryPanel";
+import MiniRail from "./features/shell/MiniRail";
 import Panel from "./features/shell/Panel";
 import Rail from "./features/shell/Rail";
+import SettingsPanel from "./features/shell/SettingsPanel";
 import Start from "./features/study-sheet/Start";
 import { ui, useUi } from "./lib";
 
@@ -51,17 +53,16 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const cls = ["ws", panelOpen && exp ? "" : "noviews", full ? "fullviews" : "", page === "lab" ? "labmode" : "", railOpen ? "" : "norail"].filter(Boolean).join(" ");
+  // the full navigator only inside a project, when unfolded; otherwise the strip of project circles
+  const mini = !exp || !railOpen;
+  const cls = ["ws", panelOpen && exp ? "" : "noviews", full ? "fullviews" : "", page === "lab" ? "labmode" : "", mini ? "minirail" : ""].filter(Boolean).join(" ");
   return (
     <div className={cls} id="ws" aria-label="Analysis workspace">
       <div className="ws-body">
-        <Rail exp={exp} />
-        {!railOpen && (
-          <button className="ib sm rail-open" aria-label="Show the navigator" onClick={() => ui.set({ railOpen: true })}><Icon.sidebar /></button>
-        )}
+        {mini ? <MiniRail exp={exp} /> : <Rail exp={exp} />}
         {exp ? <Chat key={exp} exp={exp} /> : <Start />}
         <Panel exp={exp} />
-        <Resizer className="rsz-rail" cssVar="--railw" side="left" label="Sidebar width" measure={widthOf(".ws-rail")} min={200} max={() => 400} />
+        {!mini && <Resizer className="rsz-rail" cssVar="--railw" side="left" label="Sidebar width" measure={widthOf(".ws-rail")} min={200} max={() => 400} />}
         {exp && <Resizer className="rsz-views" cssVar="--panelw" side="right" label="Panel width" measure={widthOf(".ws-views")} min={380}
           max={() => window.innerWidth - (document.querySelector(".ws-rail")?.getBoundingClientRect().width ?? 0) - 400} />}
         {!panelOpen && exp && (
@@ -69,6 +70,7 @@ export default function App() {
         )}
       </div>
       <MemoryPanel />
+      <SettingsPanel />
       {toast && <div className="toast" role="status">{toast}</div>}
     </div>
   );

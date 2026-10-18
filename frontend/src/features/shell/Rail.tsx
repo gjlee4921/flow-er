@@ -1,9 +1,10 @@
-// The sidebar: the experiment, the two workbenches, and the plan as numbered lanes. Each lane runs
-// its own steps; the line joining them fills in as they finish, and the last one flowers.
+// The sidebar inside a project, unfolded: the project, the two workbenches, the plan as numbered lanes
+// (each runs its own steps; the line joining them fills in as they finish, and the last one flowers),
+// what needs the scientist now, the kept figures and the latest runs. Folded, it is the MiniRail.
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { api, type ExperimentState, type Step } from "../../api";
-import { refresh, useExperiment, useExperiments } from "../../api/hooks";
+import { refresh, useAutogateFiles, useExperiment, useExperiments } from "../../api/hooks";
 import { Bloom, Flower, Icon, Mark } from "../../components/icons";
 import { ui, useUi, type Page, type Place } from "../../lib";
 
@@ -164,6 +165,35 @@ function ProjectMenu({ exp, title, sub }: { exp: string | null; title: string; s
   );
 }
 
+/** What is waiting on the scientist in this project: a draft to keep or drop, steps that failed or are
+ *  blocked, and files the lab's models have not gated yet. Each opens where it is dealt with. */
+function NeedsYou({ exp, s }: { exp: string; s: ExperimentState }) {
+  const { data: gated } = useAutogateFiles(exp, !!s.plan.some((p) => p.op === "autogate"));
+  const title = Object.fromEntries(s.plan.map((p) => [p.id, p.title]));
+  const latest = new Map(s.runs.map((r) => [r.step, r]));
+  const stuck = [...latest.values()].filter((r) => r.status === "failed" || r.status === "blocked");
+  const ungated = gated?.lab ? gated.files.filter((f) => !f.gated).length : 0;
+  const DRAFT = { plan: "A plan", gate: "A gate", view: "A figure", macro: "A clean-up step", report: "A write-up" } as const;
+  const items: { k: string; text: string; sub?: string; go: () => void }[] = [];
+  if (s.draft) items.push({ k: "draft", text: `${DRAFT[s.draft.kind] ?? "A draft"} waiting to be kept`, sub: s.draft.summary,
+    go: () => ui.open(s.draft!.kind === "gate" ? "lab" : s.draft!.kind === "view" || s.draft!.kind === "report" ? "results" : "flow") });
+  for (const r of stuck) items.push({ k: r.step, text: `${title[r.step] ?? r.step}: ${r.status}`, sub: r.summary, go: () => ui.open("flow") });
+  if (ungated) items.push({ k: "ungated", text: `${ungated} of ${gated!.files.length} files not gated by the models yet`, go: () => ui.open("lab") });
+  return (
+    <>
+      <div className="rail-h">Needs you</div>
+      <div className="rail-sec">
+        {items.map((it) => (
+          <button key={it.k} className="rail-item need" title={it.sub} onClick={it.go}>
+            <span className="need-dot" aria-hidden="true" /><span className="nm">{it.text}</span>
+          </button>
+        ))}
+        {!items.length && <span className="rail-none">Nothing waiting</span>}
+      </div>
+    </>
+  );
+}
+
 export default function Rail({ exp }: { exp: string | null }) {
   const qc = useQueryClient();
   const { data: s } = useExperiment(exp);
@@ -193,9 +223,13 @@ export default function Rail({ exp }: { exp: string | null }) {
   return (
     <aside className="ws-rail" id="ws-rail" aria-label="Navigator">
       <div className="rail-top">
-        <span className="brand-me" title="Will · flow-er on this machine"><Mark /><span className="me-badge" aria-label="Signed in as Will">W</span></span>
+        <button className="brand-me" title="Settings and what flow-er remembers" aria-label="Settings" onClick={() => ui.set({ settingsOpen: true })}>
+          <Mark /><span className="me-badge" aria-hidden="true">W</span></button>
         <ProjectMenu exp={exp} title={s?.title ?? "flow-er"} sub={s ? `${s.snapshot.samples.length} files · ${s.snapshot.channels.length} channels` : "Nothing open yet"} />
-        <button className="ib sm" aria-label="Start another analysis" title="Start another analysis" onClick={() => ui.openProject(null)}><Icon.plus /></button>
+        <span className="rail-acts">
+          <button className="ib sm" aria-label="Start another analysis" title="Start another analysis" onClick={() => { ui.openProject(null); ui.set({ dock: "open" }); }}><Icon.plus /></button>
+          <button className="ib sm" aria-label="Fold the sidebar" title="Fold the sidebar" onClick={() => ui.set({ railOpen: false })}><Icon.sidebar /></button>
+        </span>
       </div>
       {s && (
         <div className="plan-nav" id="plan-nav">
@@ -227,13 +261,28 @@ export default function Rail({ exp }: { exp: string | null }) {
               );
             })}
           </div>
+          <NeedsYou exp={exp!} s={s} />
+          {!!s.views.length && (
+            <>
+              <div className="rail-h">Figures</div>
+              <div className="rail-sec">
+                {s.views.slice(-6).reverse().map((v) => (
+                  <button key={v.id} className="rail-item" title={v.caption || v.title}
+                    onClick={() => { ui.lab({ view: "saved", fig: v.id }); ui.open("lab"); }}>
+                    <Icon.gallery /><span className="nm">{v.title}</span>
+                  </button>
+                ))}
+                {s.views.length > 6 && <button className="rail-item more" onClick={() => ui.open("results")}><span className="nm">All {s.views.length} in Results</span></button>}
+              </div>
+            </>
+          )}
           {!!s.runs.length && (
             <>
-              <div className="rail-h">Runs</div>
+              <div className="rail-h">Recent runs</div>
               <div className="rail-sec">
                 {s.runs.slice(-4).reverse().map((r) => (
                   <div key={r.step} className="run-row" title={r.summary}>
-                    <span className={`rdot ${r.status}`} /><span className="nm">{r.step}</span><span className="val">{r.at.slice(11, 16)}</span>
+                    <span className={`rdot ${r.status}`} /><span className="nm">{s.plan.find((p) => p.id === r.step)?.title ?? r.step}</span><span className="val">{r.at.slice(11, 16)}</span>
                   </div>
                 ))}
               </div>

@@ -3,6 +3,13 @@ import type { Step } from "../api";
 import { useSyncExternalStore } from "react";
 import { marked } from "marked";
 
+/** "today", "yesterday", "3 days ago", else the date. */
+export function ago(iso?: string | null) {
+  if (!iso) return "";
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
+  return days <= 0 ? "today" : days === 1 ? "yesterday" : days < 14 ? `${days} days ago` : iso.slice(0, 10);
+}
+
 export const fmt = (n: number, d = 0) =>
   Number(n).toLocaleString("en-GB", { minimumFractionDigits: d, maximumFractionDigits: d });
 export const clamp = (x: number, a: number, b: number) => Math.max(a, Math.min(b, x));
@@ -55,6 +62,7 @@ export const SERIES = ["#0a84ff", "#ff9f0a", "#2fb7c9", "#bf5af2", "#30d158", "#
 
 // ---- a small store for what the screen shows ------------------------------------------------
 
+export type DockState = "rest" | "peek" | "open";
 export type Page = "none" | "flow" | "lab" | "results" | "measure" | "models" | "clean" | "data";
 export type LabState = {
   sample?: string; parent: string | null; x?: string; y?: string;
@@ -84,6 +92,10 @@ export type UiState = {
   autoSend: string | null;
   /** the panel listing what flow-er remembers about the scientist */
   memoryOpen: boolean;
+  /** the settings panel (opened from the profile button at the top of the sidebar) */
+  settingsOpen: boolean;
+  /** the start page's composer: folded into a flower, unfolded on hover, or open */
+  dock: DockState;
   /** the workflow run being followed live: each step's status as it goes */
   run: { exp: string; id: string; status: string; nodes: Record<string, { status: string; summary?: string; title?: string; op?: string }> } | null;
 };
@@ -104,7 +116,7 @@ export const lastProject = () => { try { return localStorage.getItem("flower.las
 let state: UiState = {
   exp: linked ?? saved, page: "none", panelOpen: true, full: false, railOpen: true,
   lab: { ...LAB0 },
-  prevPage: "flow", toast: null, agentBusy: null, planPreview: null, autoSend: null, memoryOpen: false, run: null,
+  prevPage: "flow", toast: null, agentBusy: null, planPreview: null, autoSend: null, memoryOpen: false, settingsOpen: false, dock: "rest", run: null,
 };
 const listeners = new Set<() => void>();
 /** Where you are in a project: the page, the panel and the data lab. */

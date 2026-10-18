@@ -132,6 +132,9 @@ export type TurnEvent =
   | { type: "error"; error: string };
 
 export type Health = { status: string; llm_provider: string; model: string; llm_key: string };
+/** How the backend is set up (read-only; from backend/.env). */
+export type Settings = Health & { agent_max_rounds: number; data_dir: string; models_dir: string; workspace_dir: string;
+  import_roots: string[]; upload_max_mb: number; colab_jobs_dir: string | null; colab: string; env_file: string; env_file_exists: boolean };
 export type ModelStatus = { available: boolean; message: string; labs?: string[]; registry?: boolean; train?: boolean; infer?: boolean };
 
 class ApiError extends Error {
@@ -188,6 +191,7 @@ const q = (o: Record<string, string | null | undefined>) =>
 
 export const api = {
   health: () => req<Health>("GET", "/health"),
+  settings: () => req<Settings>("GET", "/settings"),
   datasets: () => req<Dataset[]>("GET", "/datasets"),
   experiments: () => req<Experiment[]>("GET", "/experiments"),
   renameProject: (id: string, title: string) => req<Experiment>("PATCH", `/experiments/${id}`, { title }),

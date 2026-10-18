@@ -5,6 +5,7 @@ import { api, type UiEvent } from ".";
 import { ui, type Page } from "../lib";
 
 export const useHealth = () => useQuery({ queryKey: ["health"], queryFn: api.health, refetchInterval: 30000 });
+export const useSettings = (on = true) => useQuery({ queryKey: ["settings"], queryFn: api.settings, enabled: on });
 export const useDatasets = () => useQuery({ queryKey: ["datasets"], queryFn: api.datasets });
 export const useExperiments = () => useQuery({ queryKey: ["experiments"], queryFn: api.experiments });
 export const useModels = () => useQuery({ queryKey: ["models"], queryFn: api.models });

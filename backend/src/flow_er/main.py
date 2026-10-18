@@ -46,3 +46,24 @@ def health() -> dict[str, str]:
         "model": settings.openai_model if settings.llm_provider == "openai" else "",
         "llm_key": "loaded" if settings.openai_api_key else "missing",
     }
+
+
+@app.get("/settings")
+def current_settings() -> dict:
+    """How this backend is set up, for the settings panel: the agent, the folders, upload limits and
+    GPU retraining. Read-only (they come from backend/.env); never a key."""
+    from flow_er.config import _ENV_FILE
+    from flow_er.ml import remote
+    colab = ("not set" if not settings.colab_jobs_dir else
+             "notebook running" if remote.notebook_alive() else "notebook quiet")
+    return {
+        **health(),
+        "agent_max_rounds": settings.agent_max_rounds,
+        "data_dir": str(settings.data_dir), "models_dir": str(settings.models_dir),
+        "workspace_dir": str(settings.workspace_dir),
+        "import_roots": [r.strip() for r in settings.import_roots.split(",") if r.strip()],
+        "upload_max_mb": settings.upload_max_mb,
+        "colab_jobs_dir": str(settings.colab_jobs_dir) if settings.colab_jobs_dir else None,
+        "colab": colab,
+        "env_file": str(_ENV_FILE), "env_file_exists": _ENV_FILE.exists(),
+    }

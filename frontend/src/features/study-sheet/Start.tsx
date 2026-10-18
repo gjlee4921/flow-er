@@ -6,17 +6,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { api, type Dataset, type Experiment, type Rejected } from "../../api";
 import { useDatasets, useExperiments, useHealth, useLabModels, useModels } from "../../api/hooks";
 import { Bloom, Flower, Icon } from "../../components/icons";
-import { fmt, lastProject, ui } from "../../lib";
-import Dock, { type DockState } from "./Dock";
+import { ago, fmt, lastProject, ui, useUi, type DockState } from "../../lib";
+import Dock from "./Dock";
 
 const KIND = { example: "Example", upload: "Uploaded", folder: "On this computer" } as const;
-
-/** "today", "yesterday", "3 days ago", else the date. */
-function ago(iso?: string) {
-  if (!iso) return "";
-  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
-  return days <= 0 ? "today" : days === 1 ? "yesterday" : days < 14 ? `${days} days ago` : iso.slice(0, 10);
-}
 
 const folderOf = (path: string) => path.split(/[\\/]/).filter(Boolean).pop()?.replace(/[_-]+/g, " ") ?? "";
 
@@ -69,7 +62,9 @@ export default function Start() {
   const { data: models } = useModels();
   const [chosen, setChosen] = useState<Dataset | null>(null);
   const [text, setText] = useState("");
-  const [dock, setDock] = useState<DockState>("rest");
+  // in the store, so the sidebar's + can open it
+  const dock = useUi((u) => u.dock);
+  const setDock = (d: DockState) => ui.set({ dock: d });
   const [busy, setBusy] = useState(false);
   const [upload, setUpload] = useState<{ share: number; names: string } | null>(null);
   const [rejected, setRejected] = useState<Rejected[]>([]);
@@ -112,6 +107,7 @@ export default function Start() {
       const e = await api.create(d.name);
       await qc.invalidateQueries({ queryKey: ["experiments"] });
       if (text.trim()) ui.set({ autoSend: text.trim() });
+      ui.set({ dock: "rest" });
       ui.openProject(e.id);
     } catch (err) {
       ui.toast((err as Error).message);

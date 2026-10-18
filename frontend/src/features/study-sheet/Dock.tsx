@@ -4,8 +4,9 @@
 import { useEffect, useRef } from "react";
 import type { Dataset } from "../../api";
 import { Bloom, Flower, Icon } from "../../components/icons";
+import type { DockState } from "../../lib";
 
-export type DockState = "rest" | "peek" | "open";
+export type { DockState };
 
 type Props = {
   state: DockState; setState: (s: DockState) => void;
