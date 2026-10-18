@@ -92,7 +92,7 @@ def _fingerprint(exp_id: str) -> dict:
     sha = lambda v: hashlib.sha1(json.dumps(v, default=str).encode()).hexdigest()
     try:  # the model version and who each file came from: what the model steps also depend on
         from flow_er.workspace import models
-        model_print = sha([models.version(exp_id), store.state(exp_id, "sample_meta")])
+        model_print = sha([models.fingerprint(exp_id), store.state(exp_id, "sample_meta")])
     except Exception:  # noqa: BLE001  without the models nothing reads this
         model_print = "none"
     return {"files": sha(files), "gates": sha(store.state(exp_id, "gates")), "models": model_print}

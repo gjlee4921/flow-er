@@ -63,6 +63,9 @@ def main() -> int:
     print(f"threshold {stats['threshold']}: catches {stats['wrong_flagged']} of {stats['wrong']} wrong gates, "
           f"flags {stats['right_flagged']} right ones ({stats['flagged']} of {stats['gates']} flagged); "
           f"the default {stats['default_threshold']} caught {stats['default_wrong_flagged']}")
+    print("trade-off:  threshold  wrong caught  right flagged")
+    for c in stats["curve"]:
+        print(f"            {c['threshold']:.3f}     {c['wrong_flagged']:>2} of {stats['wrong']}       {c['right_flagged']:>2} of {stats['gates'] - stats['wrong']}")
     if a.write:
         v = confidence.store(a.lab, stats, donors=sorted({w.get("individual", "") for w in wells}))
         print(f"stored in {a.lab}/{v}")

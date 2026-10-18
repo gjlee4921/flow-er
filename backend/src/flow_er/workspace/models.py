@@ -108,6 +108,15 @@ def version(exp_id: str) -> str:
     return cur.read_text().strip() if cur and cur.exists() else "template"
 
 
+def fingerprint(exp_id: str) -> str:
+    """What a cached result depends on: the version and its calibrated review threshold, so
+    calibrating a version re-flags the gates without a new version."""
+    ver, lab = version(exp_id), lab_for(exp_id)
+    vfile = labs_root() / (lab or "") / ver / "version.json"
+    thr = json.loads(vfile.read_text()).get("confidence_threshold") if lab and vfile.exists() else None
+    return f"{ver}@{thr}" if thr else ver
+
+
 # ---- gating a file --------------------------------------------------------------------------
 
 def _path(exp_id: str, sid: str) -> Path:
@@ -120,10 +129,10 @@ def autogate(exp_id: str, sid: str, force: bool = False) -> dict:
     template and model version."""
     ml = _ml()
     out = _path(exp_id, sid)
-    ver, lab = version(exp_id), lab_for(exp_id)
+    ver, lab, print_ = version(exp_id), lab_for(exp_id), fingerprint(exp_id)
     if out.exists() and not force:
         cached = json.loads(out.read_text())
-        if cached.get("model_version_used") == ver:
+        if cached.get("model_fingerprint", cached.get("model_version_used")) == print_:
             return cached
     ds = labmod.dataset(exp_id)
     meta = samplemeta.of(exp_id, sid)
@@ -137,7 +146,9 @@ def autogate(exp_id: str, sid: str, force: bool = False) -> dict:
     for g in body["gates"]:
         (g.get("plot") or {}).pop("cells", None)  # keep the density; the sampled cells are only for drawing live
     _score(exp_id, sid, res, body)
-    body.update(sample=sid, individual=meta.get("individual"), unstim=unstim, model_version_used=ver, seconds=seconds)
+    body.update(sample=sid, individual=meta.get("individual"), unstim=unstim, model_version_used=ver,
+                model_fingerprint=print_, confidence_threshold=res.gates and next(iter(res.gates.values())).threshold,
+                seconds=seconds)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(body))
     with _lock:

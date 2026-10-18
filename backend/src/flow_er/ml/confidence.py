@@ -35,11 +35,15 @@ def choose_threshold(rows: list[dict], large_pp: float = LARGE_ERROR_PP) -> dict
             best = (j, float(t))
     t = best[1]
     flag = conf < t
+    # the trade-off at a few thresholds: wrong gates caught against right gates sent for review
+    curve = [{"threshold": round(float(c), 4), "wrong_flagged": int(((conf < c) & wrong).sum()),
+              "right_flagged": int(((conf < c) & ~wrong).sum())}
+             for c in sorted({0.6, 0.7, 0.8, 0.85, 0.9, round(t, 4)})]
     return {"threshold": round(t, 4), "large_error_pp": large_pp, "gates": len(rows),
             "wrong": int(wrong.sum()), "wrong_flagged": int((flag & wrong).sum()),
             "right_flagged": int((flag & ~wrong).sum()), "flagged": int(flag.sum()),
             "default_threshold": LOW_CONFIDENCE,
-            "default_wrong_flagged": int(((conf < LOW_CONFIDENCE) & wrong).sum())}
+            "default_wrong_flagged": int(((conf < LOW_CONFIDENCE) & wrong).sum()), "curve": curve}
 
 
 def store(lab: str, stats: dict, version: str | None = None, donors: list[str] | None = None) -> str:
