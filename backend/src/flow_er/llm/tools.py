@@ -6,21 +6,19 @@ nothing lands in the experiment's state until `keep`.
 """
 from __future__ import annotations
 
-import ast
-import json
 import re
-import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from flow_er.llm import client, prompts
+from flow_er.llm import client
 from flow_er.workspace import (
     data,
     executor,
     lab,
     memory,
     models,
+    nodes,
     plan,
     store,
     toolkit,
@@ -285,29 +283,52 @@ def _view(ctx: Ctx, **spec: Any) -> dict:
 
 
 @tool("write_macro",
-      "Have a macro-writing subagent write a small deterministic script for a step no built-in op covers. "
-      "It adapts open-source code where it can and records the source and licence. Saved as a draft; not run.",
-      {"goal": {"type": "string"}, "inputs": {"type": "array", "items": {"type": "string"}},
-       "outputs": {"type": "array", "items": {"type": "string"}}}, ["goal"])
-def _macro(ctx: Ctx, goal: str, inputs: list[str] | None = None, outputs: list[str] | None = None) -> dict:
-    from flow_er.llm.agent import run_subagent
+      "Add a script step for something no built-in op covers (a QC rule, a ratio, a custom statistic). A subagent finds "
+      "reference code on the allowed sites, adapts it (only MIT, BSD, Apache-2.0, ISC or PSF sources), and tests it in the "
+      "sandbox; the tested step joins the plan as a draft. inputs: the outputs it reads (fcs for the files, or an earlier "
+      "step's output that is a table). If the source's licence is refused, say why and offer to write it from scratch.",
+      {"goal": {"type": "string", "description": "What the step must do, in the scientist's terms, with any thresholds they gave."},
+       "inputs": {"type": "array", "items": {"type": "string"}},
+       "after": {"type": "string", "description": "The step it goes after; by default after the last step it reads from."}},
+      ["goal"])
+def _macro(ctx: Ctx, goal: str, inputs: list[str] | None = None, after: str | None = None) -> dict:
+    from flow_er.llm import script_writer
+    d = store.draft(ctx.exp_id)
+    steps = [dict(s) for s in (d["payload"] if d and d["kind"] == "plan" else store.state(ctx.exp_id, "plan"))]
+    inputs = inputs or ["fcs"]
+    ports = {}
+    for name in inputs:
+        kind = nodes.port_type(name, steps)
+        if kind in ("samples", "events"):
+            ports[re.sub(r"\W+", "_", name)] = "events"
+        elif kind == "table":
+            ports[re.sub(r"\W+", "_", name)] = "table"
+        else:
+            raise ValueError(f"a script reads the files' events or a table; '{name}' is {kind}")
     chans = [c["id"] for c in lab.dataset(ctx.exp_id).channels()]
-    task = json.dumps({"goal": goal, "inputs": inputs or [], "outputs": outputs or [], "channels": chans})
-    out = run_subagent(prompts.MACRO_WRITER, task)
-    code = out.get("code", "")
-    ast.parse(code)  # a syntax error is a ValueError the agent sees and can fix
-    allowed = {"MIT", "BSD-2", "BSD-3", "BSD", "Apache-2.0", "Apache 2.0", "public domain", "paper"}
-    bad = [p for p in out.get("provenance", []) if p.get("licence") not in allowed]
-    if bad:
-        raise ValueError(f"sources with licences that are not allowed: {[b.get('name') for b in bad]}")
-    mid = re.sub(r"[^a-z0-9]+", "-", out.get("title", "macro").lower()).strip("-")[:32] or uuid.uuid4().hex[:6]
-    payload = {"id": mid, "title": out.get("title", "Macro"), "summary": out.get("summary", ""), "code": code,
-               "provenance": out.get("provenance", []), "inputs": out.get("inputs", inputs or []),
-               "outputs": out.get("outputs", outputs or [])}
-    d = store.set_draft(ctx.exp_id, "macro", payload, f"A macro: {payload['title']}")
-    ctx.emit(type="open", page="clean")
+    # what the writer is doing, shown live under this step (not kept with the message)
+    progress = (lambda text: ctx.live({"type": "progress", "text": text})) if ctx.live else None
+    out = script_writer.write(goal, ports, chans, on_progress=progress)
+    if out.get("refused"):
+        return {"refused": out["refused"], "sources": out.get("fetched", [])}
+    sid = re.sub(r"[^a-z0-9]+", "_", out["title"].lower()).strip("_")[:28] or "script"
+    while any(s["id"] == sid for s in steps):
+        sid += "_2"
+    step = {"id": sid, "op": "custom_macro", "title": out["title"], "why": out["summary"], "inputs": inputs,
+            "outputs": [f"{sid}_{o}" for o in out["outputs"]],
+            "script": {k: out[k] for k in ("code", "provenance", "fixture", "test")}}
+    made = {o: n for n, s in enumerate(steps) for o in s.get("outputs", [])}
+    at = next((n + 1 for n, s in enumerate(steps) if s["id"] == after), None)
+    steps.insert(at if at is not None else max([made[i] + 1 for i in inputs if i in made], default=0), step)
+    clean = plan.validate(steps)
+    prov = out["provenance"]
+    d = store.set_draft(ctx.exp_id, "plan", clean, f"Added a script step: {out['title']} (passed its test in the sandbox)")
+    ctx.emit(type="open", page="flow")
     ctx.emit(type="refresh")
-    return {"draft": d["id"], "macro_id": mid, "title": payload["title"], "provenance": payload["provenance"]}
+    return {"draft": d["id"], "step": sid, "title": out["title"], "summary": out["summary"],
+            "source": prov.get("source") or "written for this step", "licence": prov.get("licence"),
+            "test": {"passed": True, "same_output_twice": True, "seconds": out["test"].get("seconds")},
+            "outputs": step["outputs"]}
 
 
 @tool("train_model", "Train the gating model for one gate. Says plainly if the models are not available yet.",
