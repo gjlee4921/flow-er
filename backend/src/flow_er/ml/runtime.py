@@ -40,6 +40,7 @@ class GateOutput:
     density: np.ndarray                # (101, 101) parent counts used as the model input
     prob: np.ndarray | None = None     # (101, 101) probability map, None for template copy
     plot_cells: np.ndarray | None = None   # (<= PLOT_CELLS, 2) display coords of parent cells
+    threshold: float = LOW_CONFIDENCE  # the version's calibrated threshold, else the default
 
     @property
     def percent_of_parent(self) -> float:
@@ -47,7 +48,7 @@ class GateOutput:
 
     @property
     def low_confidence(self) -> bool:
-        return self.confidence is not None and self.confidence < LOW_CONFIDENCE
+        return self.confidence is not None and self.confidence < self.threshold
 
     def to_json(self, plot: bool = False) -> dict:
         out = {"gate": self.key, "parent": self.parent, "x": self.x, "y": self.y,
@@ -126,6 +127,7 @@ def autogate(fcs_path: str | Path, tree: GateTree, lab: str | None = None,
         unstim = autogate(unstim, tree, lab, comp, None, False, seed, use_models)
     rng = np.random.default_rng(seed)
     info = registry.version_info(lab) if lab else None
+    threshold = float((info or {}).get("confidence_threshold") or LOW_CONFIDENCE)
     result = GatingResult(str(fcs.path), fcs.n_events, lab, info["version"] if info else None,
                           channels={c: fcs.pnr[c] for c, _ in channels}, comp=comp)
     everything = np.ones(fcs.n_events, bool)
@@ -166,7 +168,8 @@ def autogate(fcs_path: str | Path, tree: GateTree, lab: str | None = None,
             polygon_display=polygon,
             polygon_raw=None if polygon is None else polygon_to_raw(polygon, chans, pnrs),
             count=int(member.sum()), parent_count=len(cells), confidence=confidence,
-            membership=membership, density=density, prob=prob, plot_cells=plot_cells)
+            membership=membership, density=density, prob=prob, plot_cells=plot_cells,
+            threshold=threshold)
     return result
 
 
