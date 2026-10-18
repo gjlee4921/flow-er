@@ -111,7 +111,7 @@ def autogate_accept(exp_id: str, sample: str, body: AcceptIn) -> dict:
 def lab_models(lab_name: str) -> dict:
     """Every version of a lab's models, with metrics and which one is current."""
     try:
-        return {"lab": lab_name, "versions": models.versions(lab_name)}
+        return {"lab": lab_name, "versions": models.versions(lab_name), "taught": models.taught(lab_name)}
     except Exception as e:
         raise HTTPException(404, f"no models for lab {lab_name}: {e}") from e
 
@@ -127,9 +127,13 @@ def lab_set_current(lab_name: str, version: str) -> dict:
 
 class RetrainIn(BaseModel):
     max_minutes: float | None = 10
+    gates: list[str] | None = None
 
 
 @router.post("/labs/{lab_name}/retrain")
 def lab_retrain(lab_name: str, body: RetrainIn) -> dict:
     """Retrain a lab's models on its kept gates, as a background job (poll /jobs/{id})."""
-    return models.retrain(lab_name, body.max_minutes)
+    try:
+        return models.retrain(lab_name, body.max_minutes, body.gates)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e

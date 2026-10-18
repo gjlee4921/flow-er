@@ -66,7 +66,11 @@ def update(exp_id: str, body: ProjectPatch) -> dict:
     title = body.title.strip() if body.title is not None else None
     if title == "":
         raise HTTPException(400, "a project needs a name")
-    m = store.update_meta(exp_id, title=title, archived=body.archived)
+    if body.lab and not (settings.models_dir / "labs" / body.lab / "template.json").exists():
+        raise HTTPException(400, f"no lab {body.lab} in the models folder")
+    m = store.update_meta(exp_id, title=title, archived=body.archived, lab=body.lab)
+    if body.lab is not None:
+        store.journal(exp_id, "lab", {"lab": body.lab})
     if body.title is not None:
         store.journal(exp_id, "rename", {"title": title})
     if body.archived is not None:

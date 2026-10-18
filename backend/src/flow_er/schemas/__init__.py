@@ -10,6 +10,8 @@ class NewExperiment(BaseModel):
 class ProjectPatch(BaseModel):
     title: str | None = None
     archived: bool | None = None
+    # pin the project to one lab's models (a copy used for a demo, say), so teaching never touches another
+    lab: str | None = None
 
 
 class ChatIn(BaseModel):

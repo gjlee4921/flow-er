@@ -88,6 +88,9 @@ export type AutogateGate = {
   polygon: { display: number[][] | null; raw: number[][] | null }; plot?: { density: number[][] };
 };
 export type AutogateResult = { sample: string; lab: string | null; model_version: string | null; individual?: string; unstim?: string | null; seconds?: number; gates: AutogateGate[] };
+export type Taught = { samples: number; individuals: string[] };
+export type LabJob = { id: string; lab: string; status: string; lines: string[]; error?: string;
+  summary?: { version: string | null; promoted: boolean; reason: string; graduated: string[] } | null };
 export type LabVersion = { version: string; current: boolean; created?: string; notes?: string; metrics?: Record<string, unknown>; parent?: string | null };
 export type UiEvent =
   | { type: "refresh" }
@@ -217,8 +220,11 @@ export const api = {
   autogateResult: (id: string, sample: string) => req<AutogateResult>("GET", `/experiments/${id}/autogate/${encodeURIComponent(sample)}/result`),
   autogateReview: (id: string, sample: string) =>
     req<{ gates: string[]; sample: string; parent: string | null; x: string; y: string; gate: string }>("POST", `/experiments/${id}/autogate/${encodeURIComponent(sample)}/review`),
-  autogateAccept: (id: string, sample: string) => req<{ lab: string; gates: number; individual: string }>("POST", `/experiments/${id}/autogate/${encodeURIComponent(sample)}/accept`, {}),
-  labModels: (lab: string) => req<{ lab: string; versions: LabVersion[] }>("GET", `/labs/${encodeURIComponent(lab)}/models`),
+  autogateAccept: (id: string, sample: string) =>
+    req<{ lab: string; gates: number; from_scientist: number; individual: string; taught: Taught }>("POST", `/experiments/${id}/autogate/${encodeURIComponent(sample)}/accept`, {}),
+  labModels: (lab: string) => req<{ lab: string; versions: LabVersion[]; taught?: Taught }>("GET", `/labs/${encodeURIComponent(lab)}/models`),
+  retrainLab: (lab: string, gates?: string[]) => req<LabJob>("POST", `/labs/${encodeURIComponent(lab)}/retrain`, { gates }),
+  job: (jid: string) => req<LabJob>("GET", `/jobs/${encodeURIComponent(jid)}`),
   regionGates: (id: string, step: string, file?: string) =>
     req<{ gates: string[]; sample: string; parent: string; x: string; y: string }>("POST", `/experiments/${id}/steps/${encodeURIComponent(step)}/gates`, { file }),
   stepOutput: (id: string, step: string) => req<{ ran: boolean; status?: string; summary?: string; table?: string; at?: string; execution?: string; rows?: Record<string, any>[]; total_rows?: number }>("GET", `/experiments/${id}/steps/${encodeURIComponent(step)}/output`),

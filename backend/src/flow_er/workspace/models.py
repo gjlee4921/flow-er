@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import threading
 import time
 import uuid
@@ -70,6 +71,9 @@ def lab_for(exp_id: str) -> str | None:
     """The lab whose template names most of this experiment's FlowJo gates (at least 80% of the
     template's gates), or None. Labs that match as well (a copy of a lab, say) are told apart by
     having a current version, then by name, so the choice never depends on folder order."""
+    pinned = store.meta(exp_id).get("lab")
+    if pinned and (labs_root() / pinned / "template.json").exists():
+        return pinned          # a project pinned to one lab (a copy for a demo, say) teaches only that one
     keys = _flowjo_keys(exp_id)
     found = []
     for t in labs_root().glob("*/template.json") if keys and labs_root().exists() else []:
@@ -215,6 +219,13 @@ def table(exp_id: str, samples: list[str] | None = None) -> list[dict]:
 
 # ---- review: edits, keeps, retraining -------------------------------------------------------------
 
+MODEL_NAME = re.compile(r" \(model(?: \d+)?\)$")
+
+
+def _suffix(n: int) -> str:
+    return "(model)" if n == 1 else f"(model {n})"
+
+
 def review(exp_id: str, sid: str) -> dict:
     """A file's model gates as one draft of gates in the data lab, beside FlowJo's under the same
     parents ("CD3 (model)"), so the scientist sees both on the plot and keeps or undoes them. Polygons
@@ -223,18 +234,24 @@ def review(exp_id: str, sid: str) -> dict:
     ds = labmod.dataset(exp_id)
     xf = ds._transforms(sid)
     taken = {g["key"] for g in labmod.tree(exp_id, sid)}
+    kept = {g["key"] for g in store.state(exp_id, "gates")}
     qc = {g.key for g in template(exp_id).gates if getattr(g, "qc", False)}
+    # a second file reviewed in the same project gets "(model 2)", so each kept gate stays tied to its file
+    n = 1
+    while any(f"{g['parent']}/{g['gate'].split('/')[-1]} {_suffix(n)}".lstrip("/") in kept for g in body["gates"]):
+        n += 1
     gates, first = [], None
     for g in body["gates"]:
         raw = (g.get("polygon") or {}).get("raw")
         if not raw or g["gate"] in qc or (g["parent"] and g["parent"] not in taken):
             continue
-        name = g["gate"].split("/")[-1] + " (model)"
+        name = f"{g['gate'].split('/')[-1]} {_suffix(n)}"
         key = f"{g['parent']}/{name}" if g["parent"] else name
         pts = np.asarray(raw, dtype=float)
         cols = [xf[c].apply(pts[:, j]) if xf.get(c) is not None else pts[:, j] for j, c in enumerate((g["x"], g["y"]))]
         gates.append({"key": key, "name": name, "parent": g["parent"] or None, "source": "user", "kind": "polygon",
-                      "dims": [g["x"], g["y"]], "vertices": [[float(a), float(b)] for a, b in zip(*cols)]})
+                      "dims": [g["x"], g["y"]], "vertices": [[float(a), float(b)] for a, b in zip(*cols)],
+                      "reviewed_on": sid})
         if first is None or (g["low_confidence"] and not first["low_confidence"]):
             first = {**g, "key": key}
     if not gates:
@@ -261,24 +278,71 @@ def edit(exp_id: str, sid: str, gate: str, polygon_display: list[list[float]]) -
     return body
 
 
+def taught(lab: str) -> dict:
+    """What a lab has been taught so far: the kept files and the individuals they came from."""
+    from flow_er.ml import cache, finetune
+    d = cache.cache_dir() / finetune.lab_dataset(lab)
+    samples, people = set(), set()
+    for f in d.glob("*/*.json") if d.exists() else []:
+        m = json.loads(f.read_text())
+        samples.add(m.get("sample"))
+        people.add(m.get("individual"))
+    return {"samples": len(samples - {None}), "individuals": sorted(p for p in people if p)}
+
+
+def _scientists_polygons(exp_id: str, sid: str) -> dict[str, list[list[float]]]:
+    """The scientist's own version of each model gate on this file: the "(model)" gates reviewed on
+    it, as they were kept or left in the draft (moved or not), back in the models' display units, by
+    template key. Gates reviewed on another file never count here."""
+    from flow_er.cytometry.io import FcsFile
+    from flow_er.ml import images
+    gates = list(store.state(exp_id, "gates"))
+    d = store.draft(exp_id)
+    if d and d["kind"] == "gate":
+        gates += d["payload"] if isinstance(d["payload"], list) else [d["payload"]]
+    mine = [g for g in gates if MODEL_NAME.search(str(g.get("name", ""))) and g.get("kind") == "polygon"
+            and g.get("reviewed_on") == sid]
+    if not mine:
+        return {}
+    ds = labmod.dataset(exp_id)
+    xf = ds._transforms(sid)
+    fcs = FcsFile(ds.sample_path(sid))
+    out = {}
+    for g in mine:
+        key = (f"{g['parent']}/" if g.get("parent") else "") + MODEL_NAME.sub("", g["name"])
+        x, y = g["dims"]
+        v = np.asarray(g["vertices"], dtype=float)
+        raw = np.column_stack([xf[c].inverse(v[:, j]) if xf.get(c) is not None else v[:, j] for j, c in enumerate((x, y))])
+        out[key] = images.to_display(raw, [x, y], [fcs.pnr[x], fcs.pnr[y]]).tolist()
+    return out
+
+
 def accept(exp_id: str, sid: str, gates: dict[str, list[list[float]]] | None = None) -> dict:
-    """The scientist keeps a file's gates (as the models left them, or as given): they become the
-    lab's training examples, under the individual the file came from."""
+    """The scientist keeps a file's gates: they become the lab's training examples, under the
+    individual the file came from. Each gate is taken as the scientist left it: given in `gates`,
+    else their kept or drafted "(model)" gate from review (moved or not), else the model's own."""
     ml = _ml()
     lab = lab_for(exp_id)
     if not lab:
         raise ValueError("this experiment has no lab to learn from; its gates match no lab template")
     meta = samplemeta.of(exp_id, sid)
     res = _live(exp_id, sid)
-    accepted = gates or {k: g.polygon_display.tolist() for k, g in res.gates.items() if g.polygon_display is not None}
+    theirs = gates or _scientists_polygons(exp_id, sid)
+    accepted = {k: g.polygon_display.tolist() for k, g in res.gates.items() if g.polygon_display is not None}
+    accepted.update({k: v for k, v in theirs.items() if k in res.gates})
     ds = labmod.dataset(exp_id)
     unstim = meta.get("unstim")
+    # add_labels takes the unstimulated well's gating result (its cytokine gates' density), and a sample
+    # id that is one safe file name: the training examples are stored as <gate>/<sample id>.npz
+    unstim_res = _live(exp_id, unstim) if unstim and unstim != sid else None
+    safe_id = re.sub(r"[^A-Za-z0-9._-]+", "_", f"{exp_id}__{sid}")
     files = ml.add_labels(lab, str(ds.sample_path(sid)), template(exp_id),
                           {k: np.asarray(v, dtype=float) for k, v in accepted.items()},
-                          meta.get("individual") or sid, sample_id=f"{exp_id}/{sid}", condition=meta.get("condition") or "",
-                          unstim=str(ds.sample_path(unstim)) if unstim and unstim != sid else None)
-    store.journal(exp_id, "labels_kept", {"sample": sid, "lab": lab, "gates": len(accepted)})
-    return {"lab": lab, "gates": len(accepted), "files": [str(f) for f in files or []], "individual": meta.get("individual")}
+                          meta.get("individual") or sid, sample_id=safe_id, condition=meta.get("condition") or "",
+                          unstim=unstim_res)
+    store.journal(exp_id, "labels_kept", {"sample": sid, "lab": lab, "gates": len(accepted), "from_scientist": len(theirs)})
+    return {"lab": lab, "gates": len(accepted), "from_scientist": len([k for k in theirs if k in res.gates]),
+            "files": [str(f) for f in files or []], "individual": meta.get("individual"), "taught": taught(lab)}
 
 
 def versions(lab: str) -> list[dict]:
@@ -290,16 +354,23 @@ def set_current(lab: str, v: str) -> dict:
     return {"lab": lab, "current": v}
 
 
-def retrain(lab: str, max_minutes: float | None = 10) -> dict:
-    """Start retraining a lab in the background; its progress lines and summary land in the job."""
+def retrain(lab: str, max_minutes: float | None = 10, gates: list[str] | None = None) -> dict:
+    """Start retraining a lab in the background (only `gates` and those below them, if given; on the
+    Colab GPU when its notebook is up, else here); progress lines and the summary land in the job.
+    Refused up front with a plain reason when the lab has kept gates from fewer than 2 people."""
+    people = taught(lab)["individuals"]
+    if len(people) < 2:
+        raise ValueError(f"lab {lab} has kept gates from {len(people)} individual(s) ({', '.join(people) or 'none'}); "
+                         "retraining compares on held-out people, so teach a file from at least one more donor first")
     jid = time.strftime("%H%M%S") + "-" + uuid.uuid4().hex[:4]
-    job = {"id": jid, "kind": "retrain", "lab": lab, "status": "running", "started": store.now(), "lines": [], "summary": None}
+    job = {"id": jid, "kind": "retrain", "lab": lab, "gates": gates, "status": "running", "started": store.now(), "lines": [], "summary": None}
     with _lock:
         _jobs[jid] = job
 
     def work():
         try:
-            job["summary"] = _ml().retrain(lab, max_minutes=max_minutes, log=lambda line: job["lines"].append(str(line)))
+            job["summary"] = _ml().retrain(lab, gates=gates, max_minutes=max_minutes, on="auto",
+                                           log=lambda line: job["lines"].append(str(line)))
             job["status"] = "done"
         except Exception as e:
             log.exception("retrain %s failed", lab)
@@ -318,11 +389,39 @@ def jobs() -> list[dict]:
     return sorted(_jobs.values(), key=lambda j: j["started"], reverse=True)
 
 
+def _gate_key(exp_id: str, gate: str) -> str | None:
+    """A gate named the way a scientist says it ("CD8", "IFNy of CD8", a full path) as the template's
+    key: the key that holds the most of the asked words, the shortest on a tie (so "CD8" is the CD8
+    gate, not one below it)."""
+    keys = [g.key for g in template(exp_id).gates]
+    words = lambda t: set(re.findall(r"[a-z0-9]+", MODEL_NAME.sub("", t).lower())) - {"of", "the", "gate", "in", "on"}
+    want = words(gate)
+    if not want:
+        return None
+    exact = [k for k in keys if words(k.split("/")[-1]) == want or k == gate]
+    if len(exact) == 1:
+        return exact[0]
+    score = {k: len(want & words(k)) for k in keys}
+    best = max(score.values())
+    return min((k for k in keys if score[k] == best), key=len) if best else None
+
+
 def train(exp_id: str, gate: str | None) -> dict:
-    """The agent's train_model: retrain the experiment's lab (all gates with new corrections)."""
+    """The agent's train_model: retrain the experiment's lab on the kept gates, just `gate` and the
+    gates below it when one is named (a leaf takes 5-8 min on the CPU), else every gate with new
+    kept samples."""
     lab = lab_for(exp_id)
     if not lab:
         return {"queued": False, "message": "This experiment's gates match no lab template, so there is no model to train."}
-    j = retrain(lab)
-    store.journal(exp_id, "train_requested", {"gate": gate, "lab": lab, "job": j["id"]})
-    return {"queued": True, "job": j["id"], "message": f"Retraining lab {lab} in the background; a new version is used only if it is better on held-out individuals."}
+    key = _gate_key(exp_id, gate) if gate else None
+    if gate and not key:
+        return {"queued": False, "message": f"No gate called {gate} in lab {lab}'s template."}
+    try:
+        j = retrain(lab, gates=[key] if key else None)
+    except ValueError as e:
+        return {"queued": False, "message": str(e), "taught": taught(lab)}
+    store.journal(exp_id, "train_requested", {"gate": key, "lab": lab, "job": j["id"]})
+    what = f"{key.split('/')[-1]} and the gates below it" if key else "every gate with new kept samples"
+    return {"queued": True, "job": j["id"], "gates": [key] if key else None,
+            "message": f"Retraining {what} for lab {lab} in the background; a new model is kept only if it beats "
+                       "the current one and template copy on held-out people, and the version is used only if it is better."}

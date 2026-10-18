@@ -10,7 +10,7 @@ import {
   type Edge as RFEdge, type Node as RFNode, type NodeProps,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { api, type Execution, type ExperimentState, type Script, type Step } from "../../api";
+import { api, type Execution, type ExperimentState, type LabJob, type Script, type Step } from "../../api";
 import {
   followRun, refresh, useAutogateFiles, useAutogateResult, useExecutions, useGates, useLabModels, useNodeTypes, useSamples, useStepImages, useStepOutput,
 } from "../../api/hooks";
@@ -328,7 +328,25 @@ function AutogatePanel({ s }: { s: ExperimentState }) {
     if (!sample) return;
     try {
       const r = await api.autogateAccept(s.id, sample);
-      ui.toast(`Kept ${r.gates} gates as training examples for lab ${r.lab} (${r.individual}).`);
+      qc.invalidateQueries({ queryKey: ["lab", files?.lab, "models"] });
+      const n = r.taught.individuals.length;
+      ui.toast(`Taught lab ${r.lab} ${r.gates} gates from ${short(sample)} (${r.individual})${r.from_scientist ? `, ${r.from_scientist} as you left them in the lab` : ""}. `
+        + `It has kept gates from ${n} ${n === 1 ? "donor" : "donors"}${n < 2 ? "; teach a file from another donor before retraining" : ""}.`);
+    } catch (e) { ui.toast((e as Error).message); }
+  };
+  const [job, setJob] = useState<LabJob | null>(null);
+  const retrain = async () => {
+    if (!files?.lab) return;
+    try {
+      let j = await api.retrainLab(files.lab);
+      setJob(j);
+      while (j.status === "running") {
+        await new Promise((z) => setTimeout(z, 3000));
+        j = await api.job(j.id);
+        setJob(j);
+      }
+      qc.invalidateQueries({ queryKey: ["lab", files.lab, "models"] });
+      ui.toast(j.status === "done" ? `Retrain finished: ${j.summary?.reason}` : `Retrain stopped: ${j.error}`);
     } catch (e) { ui.toast((e as Error).message); }
   };
   const gates = res?.gates ?? [];
@@ -366,6 +384,11 @@ function AutogatePanel({ s }: { s: ExperimentState }) {
       </div>
       {!!lab?.versions.length && (
         <div className="ag-models"><b className="small">Models for lab {lab.lab}</b>
+          {lab.taught && <p className="small muted" id="ag-taught">Taught so far: {lab.taught.samples} {lab.taught.samples === 1 ? "file" : "files"} from {lab.taught.individuals.length} {lab.taught.individuals.length === 1 ? "donor" : "donors"}{lab.taught.individuals.length ? ` (${lab.taught.individuals.join(", ")})` : ""}</p>}
+          {lab.taught && <button className="btn sm" id="ag-retrain" onClick={retrain} disabled={job?.status === "running" || lab.taught.individuals.length < 2}
+            title={lab.taught.individuals.length < 2 ? "Teach a file from at least two donors first" : "Train new models on the kept gates; a version is used only if it is better"}>
+            {job?.status === "running" ? <><Flower className="sm" /> Retraining…</> : "Retrain on the kept gates"}</button>}
+          {job && <p className="small muted" id="ag-job">{job.status === "running" ? job.lines.at(-1) ?? "starting" : job.status === "done" ? job.summary?.reason : job.error}</p>}
           <ul>{lab.versions.map((v) => <li key={v.version} className={v.current ? "on" : ""}><span>{v.version}</span>{v.current && <span className="pill">current</span>}<small>{v.notes}</small></li>)}</ul>
         </div>
       )}
