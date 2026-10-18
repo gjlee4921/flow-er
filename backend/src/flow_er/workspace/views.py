@@ -47,9 +47,13 @@ def validate(exp_id: str, spec: dict) -> dict:
         problems.append("y is required")
     if spec.get("agg", "none") not in AGG:
         problems.append(f"agg must be one of {sorted(AGG)}")
-    for k in (spec.get("filter") or {}):
+    flt = spec.get("filter") or {}
+    for k in flt:
         if cols and k not in cols:
             problems.append(f"filter column '{k}' is not in {table}")
+    if not problems and flt and not any(_match(r, flt) for r in rows):
+        seen = {k: sorted({str(r.get(k)) for r in rows})[:8] for k in flt}
+        problems.append(f"the filter matches no rows of {table}; values there: {seen}")
     if problems:
         raise ValueError("; ".join(problems))
     unquote = lambda t: str(t or "").strip().strip('"').strip("'").strip()
@@ -63,12 +67,23 @@ def validate(exp_id: str, spec: dict) -> dict:
             "x_label": spec.get("x_label"), "y_label": spec.get("y_label"), "log": bool(spec.get("log"))}
 
 
+def _same(cell, want) -> bool:
+    """A filter value against a table cell. Saved tables come back as text, so true and "True",
+    1 and "1.0" are the same value."""
+    if cell == want:
+        return True
+    a, b = str(cell).strip().lower(), str(want).strip().lower()
+    if a == b:
+        return True
+    try:
+        return float(a) == float(b)
+    except ValueError:
+        return False
+
+
 def _match(row: dict, flt: dict) -> bool:
     for k, v in flt.items():
-        if isinstance(v, list):
-            if row.get(k) not in v:
-                return False
-        elif row.get(k) != v:
+        if not any(_same(row.get(k), x) for x in (v if isinstance(v, list) else [v])):
             return False
     return True
 

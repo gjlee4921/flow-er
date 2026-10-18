@@ -22,11 +22,25 @@ export const shortSample = (id: string) => {
 
 // The agent writes Markdown. Raw HTML in it is shown as text, never run.
 marked.use({ renderer: { html: (token: { text?: string; raw?: string }) => esc(token.text ?? token.raw ?? "") } });
+// a table column of numbers lines up on the right; a column of words stays on the left and wraps
+const NUMERIC = /^[\s\d.,%+\-−–()×≈<>~]*\d[\s\d.,%+\-−–()×≈<>~pP]*$/;
+marked.use({
+  walkTokens(token) {
+    if (token.type !== "table") return;
+    type Cell = { text: string; align: string | null };
+    const t = token as unknown as { align: (string | null)[]; header: Cell[]; rows: Cell[][] };
+    t.align.forEach((a, c) => {
+      const al = a ?? (t.rows.length && t.rows.every((r) => !r[c]?.text.trim() || NUMERIC.test(r[c].text)) ? "right" : "left");
+      for (const cell of [t.header[c], ...t.rows.map((r) => r[c])]) if (cell) cell.align = al;
+    });
+  },
+});
 export const markdown = (text: string) => marked.parse(text, { async: false, gfm: true, breaks: false }) as string;
 
 // Colours for populations, in the order children are listed.
 export const POP = ["#30d158", "#0a84ff", "#ff9f0a", "#bf5af2", "#ff375f", "#64d2ff", "#ac8e68", "#5e5ce6"];
-export const SERIES = ["#0a84ff", "#5e5ce6", "#2fb7c9", "#ff9f0a", "#30d158", "#bf5af2", "#ff375f", "#8e8e93"];
+// neighbours differ in hue, so two groups (ALS and HC, say) never read as one
+export const SERIES = ["#0a84ff", "#ff9f0a", "#2fb7c9", "#bf5af2", "#30d158", "#ff375f", "#5e5ce6", "#8e8e93"];
 
 // ---- a small store for what the screen shows ------------------------------------------------
 

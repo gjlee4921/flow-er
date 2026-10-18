@@ -554,6 +554,7 @@ canvas.m3:active { cursor: grabbing; }
 /* ---- the chart family ---- */
 :root { --c-mid: #7f88b8; }
 .chart .grid { stroke: var(--sep); stroke-dasharray: 2 4; }
+.chart .zero { stroke: var(--sep-2); stroke-width: 1; }
 .chart .tick { font-size: 10.5px; fill: var(--text-3); font-variant-numeric: tabular-nums; }
 .chart .axis-t { font-size: 11px; fill: var(--text-3); }
 .chart .lab { font-size: 12.5px; fill: var(--text-2); }

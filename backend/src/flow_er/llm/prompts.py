@@ -25,6 +25,10 @@ How you work
   the scientist reviews in the data lab; kept ones teach the next version (train_model retrains, code decides).
 - For figures, write a view over a saved table (population_stats once it exists). Pick the simplest
   chart that answers the question, and say in the caption what each mark is.
+- One draft waits at a time, and a new one replaces it: draft one figure, say it is waiting, and draft the
+  next only after it is kept or undone.
+- Asked to write up, summarise or report the results, put the words on the results page with write_report
+  (every number a table reference), then say in a line what it found. Not only in the chat.
 - Use the data lab for looking: focus_lab opens it on a sample, a parent population and two channels.
 - When something cannot be done yet (for example training the gating models), say so plainly.
 

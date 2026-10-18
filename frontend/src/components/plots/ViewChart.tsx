@@ -17,13 +17,23 @@ const label = (v: unknown) => {
 const num = (v: unknown) => (typeof v === "number" ? v : Number(v));
 const nice = (v: number) => (Math.abs(v) >= 100 ? fmt(v) : Math.abs(v) >= 1 ? fmt(v, 2) : fmt(v, 3));
 
-function ticks(max: number, n = 4) {
-  if (max <= 0) return [0];
-  const step = Math.pow(10, Math.floor(Math.log10(max / n)));
-  const s = [1, 2, 2.5, 5, 10].map((k) => k * step).find((k) => max / k <= n) ?? step * 10;
+/** Round tick values from lo to hi (lo is 0 unless some values are negative), always through 0. */
+function ticks(lo: number, hi: number, n = 4) {
+  const span = hi - lo;
+  if (span <= 0) return [0];
+  const step = Math.pow(10, Math.floor(Math.log10(span / n)));
+  const s = [1, 2, 2.5, 5, 10].map((k) => k * step).find((k) => span / k <= n) ?? step * 10;
   const out = [];
-  for (let v = 0; v <= max * 1.0001; v += s) out.push(+v.toFixed(10));
+  for (let v = Math.ceil(lo / s - 1e-9) * s; v <= hi * 1.0001 + 1e-12; v += s) out.push(+v.toFixed(10));
   return out;
+}
+
+/** Up to two lines for a long axis title, split at the space nearest the middle. */
+function lines(t: string, max = 34): string[] {
+  if (t.length <= max) return [t];
+  const mid = t.length / 2;
+  const at = [...t.matchAll(/ /g)].map((m) => m.index!).sort((a, b) => Math.abs(a - mid) - Math.abs(b - mid))[0];
+  return at == null ? [t] : [t.slice(0, at), t.slice(at + 1)];
 }
 
 export default function ViewChart({ view }: { view: View }) {
@@ -50,10 +60,15 @@ export default function ViewChart({ view }: { view: View }) {
 
   const shown = rows.filter((r) => !spec.color || !hidden.has(String(r[spec.color])));
   const yv = (r: Record<string, any>) => num(r[spec.y!]);
-  const ymax = Math.max(1e-9, ...shown.map(yv).filter(Number.isFinite)) * 1.12;
-  const H = 300, L = 56, R = 16, T = 18, B = 58;
+  // the y range covers every value, below zero too (a response can be negative), with a little room
+  const vals = shown.map(yv).filter(Number.isFinite);
+  const top = Math.max(0, ...vals), bottom = Math.min(0, ...vals);
+  const pad = Math.max(1e-9, top - bottom) * 0.1;
+  const ymax = top > 0 || bottom === 0 ? top + pad : 0, ymin = bottom < 0 ? bottom - pad : 0;
+  const ytitle = lines(String(spec.y_label || spec.y || ""));
+  const H = 300, L = ytitle.length > 1 ? 70 : 56, R = 16, T = 18, B = 58;
   const pw = W - L - R, ph = H - T - B;
-  const Y = (v: number) => T + ph - (v / ymax) * ph;
+  const Y = (v: number) => T + ph - ((v - ymin) / Math.max(1e-9, ymax - ymin)) * ph;
   const tipFor = (r: Record<string, any>) =>
     [`<b>${esc(label(r[spec.x ?? ""]))}</b>`, spec.color ? esc(label(r[spec.color])) : "",
      `${esc(spec.y_label || spec.y)}: <b>${nice(yv(r))}</b>`, r.count != null && spec.y !== "count" ? `${fmt(num(r.count))} events` : "",
@@ -70,7 +85,8 @@ export default function ViewChart({ view }: { view: View }) {
       const g = spec.color ? String(r[spec.color]) : "_";
       const x0 = xc(String(r[spec.x!])) - (bw * visibleGroups.length) / 2 + bw * visibleGroups.indexOf(g);
       const dim = dimOf(r);
-      return <rect key={i} x={x0 + 1} y={Y(yv(r))} width={bw - 2} height={Math.max(1, Y(0) - Y(yv(r)))} rx={3}
+      // from the zero line, up for positive values and down for negative ones
+      return <rect key={i} x={x0 + 1} y={Math.min(Y(yv(r)), Y(0))} width={bw - 2} height={Math.max(1, Math.abs(Y(0) - Y(yv(r))))} rx={3}
         fill={colour(g)} opacity={dim} onMouseMove={(e) => tip.show(tipFor(r), e)} onMouseLeave={tip.hide}
         onClick={() => setSelection(label(r[spec.x!]))} style={{ cursor: "pointer" }} />;
     });
@@ -83,11 +99,24 @@ export default function ViewChart({ view }: { view: View }) {
         return <line key={`l-${x}`} x1={xc(x)} x2={xc(x)} y1={Y(yv(a))} y2={Y(yv(b))} stroke="var(--sep-2)" strokeWidth={2.5} />;
       });
     }
+    // each group gets its own column within a category, and dots that would overlap there step
+    // aside (a small beeswarm), so every donor stays visible
+    const sub = spec.type === "dot" ? Math.min(56, band / (visibleGroups.length + 1)) : 0;
+    const placed = new Map<string, [number, number][]>();
+    const at = new Map<number, number>();
+    [...shown.keys()].sort((a, b) => yv(shown[a]) - yv(shown[b])).forEach((i) => {
+      const r = shown[i], g = spec.color ? String(r[spec.color]) : "_";
+      const cx = xc(String(r[spec.x!])) + (visibleGroups.indexOf(g) - (visibleGroups.length - 1) / 2) * sub, cy = Y(yv(r));
+      const cell = placed.get(`${r[spec.x!]}|${g}`) ?? [];
+      const dx = spec.type === "dot" ? [0, 9, -9, 18, -18, 27, -27].find((d) => cell.every(([x, y]) => Math.hypot(x - (cx + d), y - cy) >= 12.5)) ?? 0 : 0;
+      cell.push([cx + dx, cy]);
+      placed.set(`${r[spec.x!]}|${g}`, cell);
+      at.set(i, cx + dx);
+    });
     marks = marks.concat(shown.map((r, i) => {
       const g = spec.color ? String(r[spec.color]) : "_";
-      const off = spec.type === "dot" ? (visibleGroups.indexOf(g) - (visibleGroups.length - 1) / 2) * Math.min(14, band / (visibleGroups.length + 1)) : 0;
       const dim = dimOf(r);
-      return <circle key={`d-${i}`} cx={xc(String(r[spec.x!])) + off} cy={Y(yv(r))} r={6} fill={colour(g)} opacity={dim}
+      return <circle key={`d-${i}`} cx={at.get(i)} cy={Y(yv(r))} r={6} fill={colour(g)} opacity={dim}
         stroke="var(--plot)" strokeWidth={1.5} onMouseMove={(e) => tip.show(tipFor(r), e)} onMouseLeave={tip.hide}
         onClick={() => setSelection(label(r[spec.x!]))} style={{ cursor: "pointer" }} />;
     }));
@@ -117,13 +146,14 @@ export default function ViewChart({ view }: { view: View }) {
     });
   }
 
-  const yt = spec.type === "heatmap" ? [] : ticks(ymax / 1.12);
+  const yt = spec.type === "heatmap" ? [] : ticks(ymin, ymax);
   const step = yt.length > 1 ? yt[1] - yt[0] : 1;
   const tickLabel = (t: number) => fmt(t, step >= 1 ? 0 : Math.min(3, Math.ceil(-Math.log10(step))));
   return (
     <div className="vchart">
       <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={spec.title}>
         {yt.map((t) => <g key={t}><line className="grid" x1={L} x2={W - R} y1={Y(t)} y2={Y(t)} /><text className="tick" x={L - 8} y={Y(t) + 4} textAnchor="end">{tickLabel(t)}</text></g>)}
+        {ymin < 0 && spec.type !== "heatmap" && <line className="zero" x1={L} x2={W - R} y1={Y(0)} y2={Y(0)} />}
         {marks}
         {spec.type !== "scatter" && xs.map((x) => (
           <text key={x} className="tick" x={spec.type === "heatmap" ? L + (pw / xs.length) * (xs.indexOf(x) + 0.5) : xc(x)} y={H - B + 18}
@@ -131,7 +161,11 @@ export default function ViewChart({ view }: { view: View }) {
         ))}
         {spec.type === "heatmap" && visibleGroups.map((g, i) => <text key={g} className="tick" x={L - 8} y={T + (ph / visibleGroups.length) * (i + 0.5) + 4} textAnchor="end">{label(g)}</text>)}
         <text className="axis-t" x={L + pw / 2} y={H - 8} textAnchor="middle">{spec.x_label || spec.x}</text>
-        {spec.type !== "heatmap" && <text className="axis-t" x={14} y={T + ph / 2} textAnchor="middle" transform={`rotate(-90 14 ${T + ph / 2})`}>{spec.y_label || spec.y}</text>}
+        {spec.type !== "heatmap" && (
+          <text className="axis-t" x={14} y={T + ph / 2} textAnchor="middle" transform={`rotate(-90 14 ${T + ph / 2})`}>
+            {ytitle.map((t, i) => <tspan key={i} x={14} dy={i ? 14 : 0}>{t}</tspan>)}
+          </text>
+        )}
       </svg>
       {spec.color && (
         <div className="legend">
