@@ -203,6 +203,35 @@ def table(exp_id: str, samples: list[str] | None = None) -> list[dict]:
 
 # ---- review: edits, keeps, retraining -------------------------------------------------------------
 
+def review(exp_id: str, sid: str) -> dict:
+    """A file's model gates as one draft of gates in the data lab, beside FlowJo's under the same
+    parents ("CD3 (model)"), so the scientist sees both on the plot and keeps or undoes them. Polygons
+    go in by their raw corners and the lab's own transforms. Opens on the first gate to review."""
+    body = result(exp_id, sid) or autogate(exp_id, sid)
+    ds = labmod.dataset(exp_id)
+    xf = ds._transforms(sid)
+    taken = {g["key"] for g in labmod.tree(exp_id, sid)}
+    qc = {g.key for g in template(exp_id).gates if getattr(g, "qc", False)}
+    gates, first = [], None
+    for g in body["gates"]:
+        raw = (g.get("polygon") or {}).get("raw")
+        if not raw or g["gate"] in qc or (g["parent"] and g["parent"] not in taken):
+            continue
+        name = g["gate"].split("/")[-1] + " (model)"
+        key = f"{g['parent']}/{name}" if g["parent"] else name
+        pts = np.asarray(raw, dtype=float)
+        cols = [xf[c].apply(pts[:, j]) if xf.get(c) is not None else pts[:, j] for j, c in enumerate((g["x"], g["y"]))]
+        gates.append({"key": key, "name": name, "parent": g["parent"] or None, "source": "user", "kind": "polygon",
+                      "dims": [g["x"], g["y"]], "vertices": [[float(a), float(b)] for a, b in zip(*cols)]})
+        if first is None or (g["low_confidence"] and not first["low_confidence"]):
+            first = {**g, "key": key}
+    if not gates:
+        raise ValueError("the models gave no gates to review for this file")
+    d = store.set_draft(exp_id, "gate", gates, f"{len(gates)} model gates on {sid} to review")
+    return {"draft": d, "gates": [g["key"] for g in gates], "sample": sid, "parent": first["parent"] or None,
+            "x": first["x"], "y": first["y"], "gate": first["key"]}
+
+
 def edit(exp_id: str, sid: str, gate: str, polygon_display: list[list[float]]) -> dict:
     """A gate the scientist moved: it and every gate below it are recomputed."""
     ml = _ml()
