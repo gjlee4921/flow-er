@@ -328,14 +328,16 @@ def edit(exp_id: str, sid: str, gate: str, polygon_display: list[list[float]]) -
 
 def taught(lab: str) -> dict:
     """What a lab has been taught so far: the kept files and the individuals they came from."""
-    from flow_er.ml import cache, finetune
-    d = cache.cache_dir() / finetune.lab_dataset(lab)
-    samples, people = set(), set()
-    for f in d.glob("*/*.json") if d.exists() else []:
-        m = json.loads(f.read_text())
-        samples.add(m.get("sample"))
-        people.add(m.get("individual"))
-    return {"samples": len(samples - {None}), "individuals": sorted(p for p in people if p)}
+    from flow_er.ml import finetune
+    kept = finetune.kept_samples(lab)
+    return {"samples": len(kept), "individuals": sorted({p for p in kept.values() if p})}
+
+
+def lab_status(lab: str) -> dict:
+    """live / outdated / offline for the start page's flower; offline too when PyTorch is missing."""
+    if not status()["available"]:
+        return {"state": "offline", "why": "the gating models need PyTorch (uv sync)", "version": None}
+    return _ml().lab_status(lab)
 
 
 def _scientists_polygons(exp_id: str, sid: str) -> dict[str, list[list[float]]]:

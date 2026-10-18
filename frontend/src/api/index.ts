@@ -92,6 +92,9 @@ export type AutogateGate = {
 };
 export type AutogateResult = { sample: string; lab: string | null; model_version: string | null; individual?: string; unstim?: string | null; seconds?: number; gates: AutogateGate[] };
 export type Taught = { samples: number; individuals: string[] };
+/** Whether a lab's current models are live, outdated (kept files it has not learned from yet) or offline (cannot run here). */
+export type LabStatus = { state: "live" | "outdated" | "offline"; why: string; version: string | null; gates?: number;
+  new_files?: number; new_individuals?: number; outdated_after?: number };
 export type LabJob = { id: string; lab: string; status: string; lines: string[]; error?: string;
   summary?: { version: string | null; promoted: boolean; reason: string; graduated: string[] } | null };
 export type LabVersion = { version: string; current: boolean; created?: string; notes?: string; metrics?: Record<string, unknown>; parent?: string | null;
@@ -229,7 +232,7 @@ export const api = {
     req<{ gates: string[]; sample: string; parent: string | null; x: string; y: string; gate: string }>("POST", `/experiments/${id}/autogate/${encodeURIComponent(sample)}/review`),
   autogateAccept: (id: string, sample: string) =>
     req<{ lab: string; gates: number; from_scientist: number; individual: string; taught: Taught }>("POST", `/experiments/${id}/autogate/${encodeURIComponent(sample)}/accept`, {}),
-  labModels: (lab: string) => req<{ lab: string; versions: LabVersion[]; taught?: Taught }>("GET", `/labs/${encodeURIComponent(lab)}/models`),
+  labModels: (lab: string) => req<{ lab: string; versions: LabVersion[]; taught?: Taught; status?: LabStatus }>("GET", `/labs/${encodeURIComponent(lab)}/models`),
   retrainLab: (lab: string, gates?: string[]) => req<LabJob>("POST", `/labs/${encodeURIComponent(lab)}/retrain`, { gates }),
   job: (jid: string) => req<LabJob>("GET", `/jobs/${encodeURIComponent(jid)}`),
   regionGates: (id: string, step: string, file?: string) =>

@@ -118,7 +118,8 @@ def autogate_accept(exp_id: str, sample: str, body: AcceptIn) -> dict:
 def lab_models(lab_name: str) -> dict:
     """Every version of a lab's models, with metrics and which one is current."""
     try:
-        return {"lab": lab_name, "versions": models.versions(lab_name), "taught": models.taught(lab_name)}
+        return {"lab": lab_name, "versions": models.versions(lab_name), "taught": models.taught(lab_name),
+                "status": models.lab_status(lab_name)}
     except Exception as e:
         raise HTTPException(404, f"no models for lab {lab_name}: {e}") from e
 

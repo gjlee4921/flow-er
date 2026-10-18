@@ -18,6 +18,7 @@ fine-tuning is enabled and where training runs (CPU or GPU), see [models.md](mod
 | `ml.retrain(lab, gates=None, max_minutes=None, log=print, on="cpu", wait_minutes=None)` | dict | A new version of the lab's per-gate UNITO models, for the gates with new accepted samples (or `gates`) and their child gates; made current only if better (see below). `max_minutes` caps each gate's training; `log` receives one progress line per epoch. `on="cpu"` trains in this process (on its CUDA GPU if it has one); `"colab"` sends the job to the Colab notebook through `COLAB_JOBS_DIR` and waits up to `wait_minutes`; `"auto"` uses Colab when the notebook's heartbeat is under 3 min old, else the CPU. |
 | `ml.confidence.threshold(lab)` | float | The low-confidence threshold autogate uses: the current version's calibrated one (`scripts/calibrate_confidence.py`, on validation donors), else 0.6. |
 | `ml.list_versions(lab)` | list of dicts | Every version with `metrics`, `training_samples`, `parent`, `current`. |
+| `ml.lab_status(lab)` | dict | `state`: `live`, `outdated` (the lab has kept >= 3 files its current version was not trained on: retrain) or `offline` (a model of the current version has no weights here or another image recipe); `why`, `version`, `new_files`, `new_individuals`. |
 | `ml.set_current(lab, version)` | — | Rollback or roll forward. |
 
 ## Coordinates
@@ -139,7 +140,7 @@ and promotes by the rule above, unless the current version changed while the job
 | `PUT /samples/{id}/gates/{gate}` (user edit) | body `{"polygon": [[x, y], ...]}` in display units → `ml.apply_edit(...)` → the updated result |
 | `POST /samples/{id}/accept` | `ml.add_labels(lab, fcs, template, {gate: polygon display}, individual, sample_id)` |
 | `POST /labs/{id}/retrain` (job) | `ml.retrain(lab, on="auto")` → `{"version", "promoted", "reason", "graduated", "gates", "metrics"}` |
-| `GET /labs/{id}/models` | `ml.list_versions(lab)`; `POST /labs/{id}/models/{version}/current` → `ml.set_current` |
+| `GET /labs/{id}/models` | `ml.list_versions(lab)` and `ml.lab_status(lab)` (as `status`); `POST /labs/{id}/models/{version}/current` → `ml.set_current` |
 | `GET /samples/{id}/gatingml` | `ml.export_gatingml(result, template, path)` |
 
 The template for a lab is a `GateTree` JSON stored by the API: built once from an uploaded `.wsp`

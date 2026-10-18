@@ -32,19 +32,26 @@ function ProjectCard({ e }: { e: Experiment }) {
   );
 }
 
-/** One lab's gating models: the version in use, what it covers, and what it has been taught. */
+const STATE = { live: "Live", outdated: "Needs retraining", offline: "Offline" } as const;
+
+/** One lab's gating models: a flower that breathes while they are live, goes black and white when
+ *  kept corrections are waiting to be learned, and stills when they cannot run; then the details. */
 function LabCard({ lab }: { lab: string }) {
   const { data } = useLabModels(lab);
   const versions = data?.versions ?? [];
   const cur = versions.find((v) => v.current);
   const gates = cur?.gates ? Object.keys(cur.gates).length : 0;
   const taught = data?.taught;
+  const st = data?.status?.state ?? "offline";
   return (
-    <div className="db-lab">
-      <div className="db-lab-h"><b>Lab {lab}</b>{cur && <span className="pill">{cur.version} in use</span>}</div>
+    <div className={`db-lab ${data ? st : "loading"}`}>
+      <div className={`lab-orb ${data ? st : "loading"}`} title={data?.status?.why}><Bloom p={1} /></div>
+      <div className="db-lab-h"><b>Lab {lab}</b>{cur && <span className="pill">{cur.version}</span>}
+        {data?.status && <span className={`lab-state ${st}`}>{STATE[st]}</span>}</div>
+      {data?.status && <p className="db-why">{data.status.why}</p>}
       {!data ? <span className="db-sub">Reading…</span> : (
         <dl className="db-dl">
-          <div><dt>Gate models</dt><dd>{gates ? `${gates} trained · rest copy the template` : "template copy only"}</dd></div>
+          <div><dt>Gate models</dt><dd>{gates ? `${gates} trained` : "none (template copy)"}</dd></div>
           <div><dt>Review flag</dt><dd>{cur?.confidence_threshold != null ? `calibrated at ${cur.confidence_threshold}` : "default 0.6 (not calibrated)"}</dd></div>
           <div><dt>Taught</dt><dd>{taught?.samples ? `${taught.samples} file${taught.samples === 1 ? "" : "s"} from ${taught.individuals.length} individual${taught.individuals.length === 1 ? "" : "s"}` : "nothing kept yet"}</dd></div>
           <div><dt>Versions</dt><dd>{versions.length}{cur?.created ? ` · current since ${ago(cur.created)}` : ""}</dd></div>
@@ -117,12 +124,6 @@ export default function Start() {
   // the project you had open last, one click away (the app no longer jumps into it by itself)
   const last = live.find((e) => e.id === lastProject());
   const labs = models?.labs ?? [];
-  const stats = [
-    { k: "Projects", v: live.length, s: `${live.filter((e) => e.plan_kept).length} with a kept plan` },
-    { k: "Figures", v: live.reduce((n, e) => n + (e.figures ?? 0), 0), s: "kept across projects" },
-    { k: "Datasets", v: datasets?.length ?? 0, s: `${fmt(datasets?.reduce((n, d) => n + d.files, 0) ?? 0)} FCS files` },
-    { k: "Gating labs", v: labs.length, s: models ? (models.available ? "models ready" : "models not installed") : "checking…" },
-  ];
 
   return (
     <main className="ws-chat start-dash">
@@ -134,10 +135,6 @@ export default function Start() {
         {health && health.llm_key !== "loaded" && (
           <p className="note warn">The agent has no model key yet: set <code>OPENAI_API_KEY</code> in <code>backend/.env</code>.</p>
         )}
-
-        <section className="db-stats" aria-label="At a glance">
-          {stats.map((x) => <div key={x.k} className="db-stat"><span className="k">{x.k}</span><b>{fmt(x.v)}</b><span className="s">{x.s}</span></div>)}
-        </section>
 
         {last && (
           <button className="st-continue" onClick={() => ui.openProject(last.id)}>

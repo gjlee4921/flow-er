@@ -33,6 +33,7 @@ EPOCHS = 300
 VAL_SHARE = 0.2
 GRADUATE = 15                 # accepted samples of a gate before it gets its own UNITO
 MAX_WORSE_PP = 1.0
+OUTDATED_AFTER = 3             # kept files the current version has not learned from
 
 
 def lab_dataset(lab: str) -> str:
@@ -326,6 +327,52 @@ def retrain(lab: str, gates: list[str] | None = None, lr: float = LR, patience: 
     log(f"{lab}: {version} {'promoted' if promoted else 'kept as candidate'}: {reason}")
     return {"version": version, "promoted": promoted, "reason": reason, "graduated": graduated,
             "gates": decisions, "metrics": {"current": before, "candidate": after}}
+
+
+def kept_samples(lab: str) -> dict[str, str]:
+    """Every sample the lab has accepted gates for -> the individual it came from."""
+    out = {}
+    d = cache.cache_dir() / lab_dataset(lab)
+    for f in sorted(d.glob("*/*.json")) if d.exists() else []:
+        m = json.loads(f.read_text())
+        if m.get("sample"):
+            out[m["sample"]] = m.get("individual") or ""
+    return out
+
+
+def lab_status(lab: str, outdated_after: int = OUTDATED_AFTER) -> dict:
+    """Whether the lab's current models are live, outdated or offline, and why.
+
+    offline: a model of the current version cannot run here (no weights, or another image recipe).
+    outdated: the lab has kept >= `outdated_after` files the current version was not trained on
+    (about one donor's wells), so a retrain has new material. Otherwise live; a lab with no
+    version gates by template copy."""
+    info = registry.version_info(lab)
+    version = info["version"] if info else None
+    broken = []
+    for gid, d in (info or {}).get("gates", {}).items():
+        d = registry._abs(d)
+        try:
+            ok = (d / "model.pt").exists() and                 json.loads((d / "recipe.json").read_text())["recipe_id"] == images.recipe_id()
+        except (OSError, ValueError, KeyError):
+            ok = False
+        if not ok:
+            broken.append(gid)
+    learned = set((info or {}).get("training_samples") or []) |         set((info or {}).get("metrics", {}).get("accepted_samples") or [])
+    new = {s: i for s, i in kept_samples(lab).items() if s not in learned}
+    out = {"version": version, "gates": len((info or {}).get("gates", {})), "new_files": len(new),
+           "new_individuals": len(set(new.values()) - {""}), "outdated_after": outdated_after}
+    if broken:
+        return {**out, "state": "offline",
+                "why": f"{len(broken)} of {version}'s gate models cannot run here (missing weights "
+                       "or another image recipe)"}
+    if len(new) >= outdated_after:
+        return {**out, "state": "outdated",
+                "why": f"{len(new)} kept file(s) from {out['new_individuals']} individual(s) are "
+                       f"not in {version or 'any version'} yet; retrain to use them"}
+    why = (f"{version} answers {out['gates']} gate(s); the rest copy the template" if version
+           else "no trained version yet; every gate copies the template")
+    return {**out, "state": "live", "why": why + (f"; {len(new)} kept file(s) waiting" if new else "")}
 
 
 def replace_polygons(result: GatingResult) -> dict[str, np.ndarray]:

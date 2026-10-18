@@ -135,3 +135,23 @@ def test_small_lab_still_holds_out_one_individual():
     few = sorted(people - in_share)[:3]
     assert len(held_out(set(few))) == 1                       # none in the share: fall back to one
     assert held_out({few[0]}) == set()                        # one person: nothing to hold out
+
+
+def test_lab_status_is_live_outdated_or_offline():
+    from flow_er.ml import cache, images
+    assert finetune.lab_status("new")["state"] == "live"          # template copy only
+    gate = settings.models_dir / "g1"
+    gate.mkdir(parents=True)
+    (gate / "recipe.json").write_text(json.dumps({"recipe_id": images.recipe_id()}))
+    registry.register_version("lab", gates={"g1": gate}, make_current=True)
+    assert finetune.lab_status("lab")["state"] == "offline"       # no weights
+    (gate / "model.pt").write_bytes(b"")
+    assert finetune.lab_status("lab")["state"] == "live"
+    d = cache.cache_dir() / finetune.lab_dataset("lab") / "g1"
+    d.mkdir(parents=True)
+    for i, person in enumerate(["a", "a", "b"]):
+        (d / f"s{i}.json").write_text(json.dumps({"sample": f"s{i}", "individual": person}))
+    st = finetune.lab_status("lab")
+    assert st["state"] == "outdated" and st["new_files"] == 3 and st["new_individuals"] == 2
+    registry.register_version("lab", gates={"g1": gate}, training_samples=["s0", "s1"], make_current=True)
+    assert finetune.lab_status("lab")["state"] == "live"          # 1 new file is below the bar

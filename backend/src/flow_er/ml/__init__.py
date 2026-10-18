@@ -1,4 +1,5 @@
-"""Gating models: classical baseline, per-gate U-Net, shared U-Net, and the runtime around them.
+"""Gating models: per-gate UNITO and template copy, the runtime around them, and per-lab retraining
+(the classical baseline and shared U-Net remain for evaluation only).
 
 Stable API for the app (shapes and endpoints: docs/runtime-api.md). Imports are lazy so that
 `import flow_er.ml` stays light; torch is only loaded when a model is used.
@@ -50,6 +51,12 @@ def retrain(lab, **kwargs):
     """Train a new lab version on all its examples; promoted only if better -> summary dict."""
     from flow_er.ml.finetune import retrain as run
     return run(lab, **kwargs)
+
+
+def lab_status(lab):
+    """Whether the lab's current models are live, outdated (kept files not learned yet) or offline."""
+    from flow_er.ml.finetune import lab_status as run
+    return run(lab)
 
 
 def list_versions(lab):
