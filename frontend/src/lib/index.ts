@@ -9,10 +9,15 @@ export const clamp = (x: number, a: number, b: number) => Math.max(a, Math.min(b
 export const css = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 export const esc = (s: unknown) =>
   String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]!));
-/** "101_DEN084Y5_15_E03_009_clean.fcs" -> "E03_009": enough to tell files apart. */
+/** "101_DEN084Y5_15_E03_009_clean.fcs" -> "E03_009", "HC Specimen_001_C5_C05 Peptide.fcs" -> "HC C05 Peptide":
+ *  enough to tell files apart, keeping the group when files from two groups share well names. */
 export const shortSample = (id: string) => {
   const m = id.match(/([A-Za-z]\d{2}_\d{3})/);
-  return m ? m[1] : id.replace(/\.fcs$/i, "").slice(-14);
+  if (m) return m[1];
+  const base = id.replace(/\.fcs$/i, "");
+  const w = base.match(/^(\S+)\s+Specimen_\d+_\w*?([A-P]\d{2})(?:\s+(.*))?$/i);
+  if (w) return [w[1], w[2], w[3]].filter(Boolean).join(" ");
+  return base.length > 18 ? `…${base.slice(-17)}` : base;
 };
 
 // The agent writes Markdown. Raw HTML in it is shown as text, never run.
