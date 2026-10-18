@@ -216,7 +216,8 @@ def gates_to_retrain(items, trained_on: set[str], gates: list[str] | None = None
 def retrain(lab: str, gates: list[str] | None = None, lr: float = LR, patience: int = PATIENCE,
             epochs: int = EPOCHS, batch: int = 8, threads: int | None = None,
             graduate: int = GRADUATE, unito_arch: dict | None = None,
-            max_minutes: float | None = None, log=print) -> dict:
+            max_minutes: float | None = None, log=print, on: str = "cpu",
+            wait_minutes: float | None = None) -> dict:
     """A new version of the lab's per-gate UNITO models; made current only if it is better.
 
     Retrains `gates` (keys or ids), or by default the gates with accepted samples the current
@@ -225,7 +226,26 @@ def retrain(lab: str, gates: list[str] | None = None, lr: float = LR, patience: 
     model is kept only if its held-out error beats both its current model and template copy on
     that gate (the baseline). Promotion is unchanged: the held-out mean error must improve and no
     gate may get worse by more than MAX_WORSE_PP. No shared model is trained. `max_minutes` caps
-    each gate's training; `log` receives one line per epoch (loss and held-out Dice)."""
+    each gate's training; `log` receives one line per epoch (loss and held-out Dice).
+
+    `on`: "cpu" trains in this process (on its CUDA GPU if it has one); "colab" sends the job to
+    the notebook through settings.colab_jobs_dir and waits up to `wait_minutes` (ml.remote);
+    "auto" uses Colab when the notebook's heartbeat is fresh, else the CPU."""
+    if on not in ("cpu", "colab", "auto"):
+        raise ValueError(f"on must be cpu, colab or auto, not {on!r}")
+    if on == "auto":
+        from flow_er.ml import remote
+        on = "colab" if remote.notebook_alive() else "cpu"
+        log(f"{lab}: retraining on {'the Colab GPU' if on == 'colab' else 'the CPU (no fresh notebook heartbeat)'}")
+    if on == "colab":
+        from flow_er.ml import remote
+        params = {"gates": gates, "lr": lr, "patience": patience, "epochs": epochs, "batch": batch,
+                  "threads": threads, "graduate": graduate, "unito_arch": unito_arch,
+                  "max_minutes": max_minutes, "on": "cpu"}
+        job = remote.submit(lab, params)
+        log(f"{lab}: sent to the GPU as {job.name}")
+        out = remote.wait(job, timeout=wait_minutes * 60 if wait_minutes else None, log=log)
+        return remote.collect(lab, job, out, log=log)
     from flow_er.ml.unet import dataset as ds
     from flow_er.ml.unet import model as unet_model
     from flow_er.ml.unet import train

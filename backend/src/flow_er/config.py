@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     import_roots: str = "~"
     # The largest file the start page accepts, in MB.
     upload_max_mb: int = 4096
+    # A folder the Colab notebook also sees (Google Drive): GPU retraining jobs go through it.
+    colab_jobs_dir: Path | None = None
 
     @property
     def splits_dir(self) -> Path:
