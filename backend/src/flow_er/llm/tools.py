@@ -387,9 +387,48 @@ def _image_steps(ctx: Ctx, parent: str, x: str, y: str) -> dict:
             "summary": "Three tested steps: render the density image, find the populations, turn regions into gates and counts."}
 
 
-@tool("train_model", "Train the gating model for one gate. Says plainly if the models are not available yet.",
-      {"gate": {"type": "string"}}, ["gate"])
-def _train(ctx: Ctx, gate: str) -> dict:
+@tool("add_autogate_step",
+      "Automate the gating: add a step that gates every file with the lab's trained models (a per-gate U-Net where the lab "
+      "has one, else its template), giving per gate the count, % of parent, which model answered, how sure it was, and "
+      "FlowJo's % and an F1 where FlowJo gates exist. As a draft. The model gates are reviewed and kept by the scientist "
+      "in the data lab; you never keep them.")
+def _autogate_step(ctx: Ctx) -> dict:
+    d = store.draft(ctx.exp_id)
+    steps = [dict(s) for s in (d["payload"] if d and d["kind"] == "plan" else store.state(ctx.exp_id, "plan"))]
+    if any(s["op"] == "autogate" for s in steps):
+        raise ValueError("the plan already has an autogate step")
+    lab_name = models.lab_for(ctx.exp_id)
+    labels = next((o for s in steps if s["op"] == "gate_from_workspace" for o in s.get("outputs", [])), None)
+    inputs = [labels] if labels else ["fcs"]
+    step = {"id": "autogate", "op": "autogate", "title": f"Gate every file with {'lab ' + lab_name + chr(39) + 's models' if lab_name else 'the template'}",
+            "why": "Automates the manual gating; unsure gates are flagged for review.", "inputs": inputs, "outputs": ["autogate_counts"]}
+    at = next((n + 1 for n, s in enumerate(steps) if labels in s.get("outputs", [])), len(steps))
+    clean = plan.validate(steps[:at] + [step] + steps[at:])
+    d = store.set_draft(ctx.exp_id, "plan", clean, f"Autogate with {lab_name or 'the template'} {models.version(ctx.exp_id)}")
+    ctx.emit(type="open", page="flow")
+    ctx.emit(type="refresh")
+    return {"draft": d["id"], "lab": lab_name, "version": models.version(ctx.exp_id),
+            "summary": "An autogate step is waiting to be kept; after a run, its gates are reviewed in the data lab."}
+
+
+@tool("read_model", "The gating models this experiment uses: the lab, the version answering, every version with its "
+      "held-out metrics, and how the last autogate run went per gate (which model, confidence, F1 against FlowJo).")
+def _read_model(ctx: Ctx) -> dict:
+    lab_name = models.lab_for(ctx.exp_id)
+    out = {"lab": lab_name, "version": models.version(ctx.exp_id), "status": models.status()["message"]}
+    if lab_name:
+        out["versions"] = [{k: v.get(k) for k in ("version", "current", "created", "notes", "metrics")} for v in models.versions(lab_name)]
+    if store.path(ctx.exp_id, "tables", "autogate_counts.csv").exists():
+        rows = lab.read_table(ctx.exp_id, "autogate_counts")
+        out["last_run"] = rows[:60]
+        out["summary"] = f"{len(rows)} gate results in autogate_counts"
+    return out
+
+
+@tool("train_model", "Retrain the experiment's lab models on the gates the scientist kept, as a background job. A new version "
+      "is used only if it is better on held-out individuals; code decides, you explain.",
+      {"gate": {"type": "string"}})
+def _train(ctx: Ctx, gate: str | None = None) -> dict:
     return models.train(ctx.exp_id, gate)
 
 
@@ -684,7 +723,8 @@ LABELS = {
     "read_attachment": "Reading {name}", "set_question": "Noting what the experiment is for",
     "plan_pipeline": "Drafting the plan", "edit_pipeline": "Changing the plan", "run_step": "Running {step_id}",
     "write_view": "Drawing a figure", "write_macro": "Writing a script", "train_model": "Checking the gating models",
-    "add_image_steps": "Setting up image steps", "keep": "Keeping the draft", "undo": "Undoing the draft", "run_workflow": "Running the workflow", "read_execution": "Reading the run", "open_page": "Opening {page}", "focus_lab": "Pointing the data lab",
+    "add_image_steps": "Setting up image steps", "add_autogate_step": "Setting up the gate models", "read_model": "Reading the gate models",
+    "keep": "Keeping the draft", "undo": "Undoing the draft", "run_workflow": "Running the workflow", "read_execution": "Reading the run", "open_page": "Opening {page}", "focus_lab": "Pointing the data lab",
     "show_plot": "Laying out the plot", "compare_files": "Lining up the files", "select_gate": "Picking out {gate}",
     "gate_stats": "Reading the numbers", "show_sheet": "Filling the sheet",
 }

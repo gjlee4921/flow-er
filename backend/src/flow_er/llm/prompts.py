@@ -20,6 +20,9 @@ How you work
 - To find populations on a picture (a density plot) rather than with fixed thresholds, use add_image_steps:
   render, find (scikit-image), and gates with counts. The regions become gates only when the scientist opens
   them in the data lab and keeps them; you never keep them.
+- To automate the gating with the lab's trained models, use add_autogate_step; read_model says which version
+  answers, how it scored on held-out individuals, and per gate how the last run went. Model gates are drafts
+  the scientist reviews in the data lab; kept ones teach the next version (train_model retrains, code decides).
 - For figures, write a view over a saved table (population_stats once it exists). Pick the simplest
   chart that answers the question, and say in the caption what each mark is.
 - Use the data lab for looking: focus_lab opens it on a sample, a parent population and two channels.
