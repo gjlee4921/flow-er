@@ -183,8 +183,10 @@ def methods(exp_id: str) -> list[dict]:
     head = data.fcs_header(ds.sample_path(samples[0]["id"])) if samples else None
     k = (head or {}).get("keywords", {})
     out = []
-    events = ", ".join(f"{s['id']} ({s['events']:,} events)" for s in samples)
-    out.append({"heading": "Samples", "text": f"{len(samples)} FCS files were analysed: {events}."})
+    # counts, not a list of every file: the files themselves are listed under Data and code
+    n = [s["events"] for s in samples]
+    events = f"{sum(n):,} events in all, {min(n):,} to {max(n):,} per file" if n else "no events"
+    out.append({"heading": "Samples", "text": f"{len(samples)} FCS files were analysed ({events}); each is listed under Data and code."})
     markers = [c["name"] for c in ds.channels() if c["group"] == "marker"]
     scatter = [c["short"] for c in ds.channels() if c["group"] == "scatter"]
     out.append({"heading": "Panel", "text": f"Markers: {', '.join(markers) or 'none named'}. Scatter: {', '.join(scatter)}."})

@@ -424,3 +424,78 @@ def test_sheet_lists_keep_gate_names_that_hold_commas():
     asked = "Lymphocytes,L/Comp-LIVE_DEAD Aqua-A, SSC-A subset/CD3,L/Comp-LIVE_DEAD Aqua-A, SSC-A subset"
     assert _rejoin(asked.split(","), known.__contains__) == [
         "Lymphocytes", "L/Comp-LIVE_DEAD Aqua-A, SSC-A subset/CD3", "L/Comp-LIVE_DEAD Aqua-A, SSC-A subset"]
+
+
+@needs_data
+def test_one_gate_of_a_waiting_set_is_kept_or_undone_with_its_parents_or_children(exp):
+    """Model gates wait as one set; keeping one keeps the waiting gates above it, undoing one drops
+    those below it, and the rest keep waiting."""
+    g = lambda key, parent: {"key": key, "name": key.split("/")[-1], "parent": parent, "source": "user", "kind": "polygon",
+                             "dims": ["FSC-A", "SSC-A"], "vertices": [[0.1, 0.1], [0.9, 0.1], [0.5, 0.9]]}
+    store.set_draft(exp, "gate", [g("A", None), g("A/B", "A"), g("A/B/C", "A/B"), g("D", None)], "4 model gates")
+    store.keep_gate(exp, "A/B")
+    assert sorted(x["key"] for x in store.state(exp, "gates")) == ["A", "A/B"]
+    assert sorted(x["key"] for x in store.draft(exp)["payload"]) == ["A/B/C", "D"]
+    store.undo_gate(exp, "A/B/C")
+    assert [x["key"] for x in store.draft(exp)["payload"]] == ["D"]
+    store.undo_gate(exp, "D")
+    assert store.draft(exp) is None
+
+
+@needs_data
+def test_lab_plots_carry_ticks_at_round_channel_values(exp):
+    """Fluorescence axes are marked at decades and scatter at round values, each where the channel's
+    own transform puts it, in order along the axis."""
+    ds = lab.dataset(exp)
+    sid = ds.sample_ids[0]
+    fl = next(c["id"] for c in ds.channels() if c["group"] == "marker")
+    xt, yt = lab.axis_ticks(ds, sid, fl), lab.axis_ticks(ds, sid, "SSC-A")
+    assert [t["label"] for t in xt][:3] == ["0", "10²", "10³"] and all(a["v"] < b["v"] for a, b in zip(xt, xt[1:]))
+    assert yt[0]["label"] == "0" and yt[1]["label"].endswith("K") and all(0 <= t["v"] <= 1.01 for t in yt)
+
+
+@needs_data
+def test_a_script_tried_in_the_sandbox_on_one_file_keeps_nothing(exp):
+    """Sandbox: the QC script tried on one file shows the events it read and what it made, and
+    leaves the workflow's tables and runs as they were."""
+    from flow_er.api.executions import try_step
+    from flow_er.workspace import scripts
+    steps = plan.validate([{"id": "qc", "op": "custom_macro", "title": "Time QC", "inputs": ["fcs"], "outputs": ["qc_clean", "qc_qc"],
+                            "script": {"code": QC_SCRIPT, "provenance": {}}}])
+    store.set_draft(exp, "plan", steps, "a QC step")
+    store.keep(exp)
+    sid = lab.dataset(exp).sample_ids[0]
+    before = sorted(p.name for p in store.path(exp, "tables").glob("*")) if store.path(exp, "tables").exists() else []
+    r = try_step(exp, "qc", sid)
+    assert r["status"] == "done" and r["sample"] == sid
+    assert r["outputs"]["qc"]["kind"] == "table" and r["outputs"]["qc"]["total"] == 1
+    assert r["inputs"]["events"]["kind"] == "events" and r["inputs"]["events"]["files"] == 1
+    after = sorted(p.name for p in store.path(exp, "tables").glob("*")) if store.path(exp, "tables").exists() else []
+    assert after == before and not store.state(exp, "runs") and scripts.check(QC_SCRIPT)["ok"]
+
+
+@needs_data
+def test_a_figure_step_with_a_chart_draws_its_figure_as_a_draft_when_the_run_reaches_it(exp):
+    """A plan that ends on a figure: the run counts, then draws the named chart from the count table,
+    as a draft waiting for Keep (nothing kept by itself). A bad column fails the step and says why."""
+    from flow_er.workspace import executor
+    base = [
+        {"id": "comp", "op": "compensate", "inputs": ["fcs"], "outputs": ["ev"]},
+        {"id": "wsg", "op": "gate_from_workspace", "inputs": ["ev", "wsp"], "outputs": ["labels"]},
+        {"id": "count", "op": "population_stats", "inputs": ["labels"], "outputs": ["counts"]},
+    ]
+    fig = {"id": "fig", "op": "view", "title": "Share of each gate", "inputs": ["counts"], "outputs": ["figure"],
+           "params": {"chart": "bar", "x": "gate", "y": "pct_parent", "color": "sample", "agg": "none"}}
+    store.set_draft(exp, "plan", plan.validate(base + [fig]), "a plan with a figure")
+    store.keep(exp)
+    run = executor.start(exp, wait=True)
+    assert run["nodes"]["fig"]["status"] == "done", run["nodes"]["fig"]
+    d = store.draft(exp)
+    assert d["kind"] == "view" and d["payload"]["table"] == "population_stats" and d["payload"]["y"] == "pct_parent"
+    assert not store.state(exp, "views")
+    store.undo(exp)
+    bad = {**fig, "params": {**fig["params"], "y": "no_such_column"}}
+    store.set_draft(exp, "plan", plan.validate(base + [bad]), "a figure on a missing column")
+    store.keep(exp)
+    node = executor.start(exp, wait=True)["nodes"]["fig"]
+    assert node["status"] == "failed" and "no_such_column" in node["summary"]

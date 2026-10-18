@@ -9,8 +9,8 @@ import { refresh, useGates, useModels, usePlot, useSamples, useToolkit, useViews
 import { Bloom, Flower, Icon, Mark } from "../../components/icons";
 import { LabHist, LabPlot, ViewChart } from "../../components/plots";
 import { Resizer, widthOf } from "../../components/Resizer";
-import { fmt, POP, shortSample, ui, useUi, type LabState } from "../../lib";
-import { askInChat } from "../agent/Chat";
+import { fmt, gateLabel, POP, shortSample, ui, useUi, type LabState } from "../../lib";
+import { sendInChat } from "../agent/Chat";
 import LabAgent from "./LabAgent";
 import LabSheet, { sheetCsv } from "./LabSheet";
 
@@ -72,10 +72,25 @@ export default function DataLab({ s }: { s: ExperimentState }) {
     } catch (e) { ui.toast((e as Error).message); }
     await refresh(qc, s.id);
   };
-  const decide = async (keep: boolean) => {
-    try { keep ? await api.keep(s.id) : await api.undo(s.id); } catch (e) { ui.toast((e as Error).message); }
+  // keep or undo one gate (with the waiting gates above it, or below it), or the whole waiting set
+  const decide = async (keep: boolean, gate?: string) => {
+    try { keep ? await api.keep(s.id, gate) : await api.undo(s.id, gate); } catch (e) { ui.toast((e as Error).message); }
     if (!keep) ui.lab({ sel: null });
     await refresh(qc, s.id);
+  };
+  const waiting = s.draft?.kind === "gate" ? [s.draft.payload].flat().length : 0;
+  // the lab's models gate the file on screen; their gates wait beside FlowJo's for keep or undo
+  const [gating, setGating] = useState(false);
+  const gateThis = async () => {
+    if (!sample) return;
+    setGating(true);
+    try {
+      const r = await api.autogateReview(s.id, sample);
+      await refresh(qc, s.id);
+      ui.lab({ sample: r.sample, parent: r.parent, x: r.x, y: r.y, view: "plot", sel: r.gate });
+      ui.toast(`${r.gates.length} model gates are waiting beside FlowJo's: keep or undo them.`);
+    } catch (e) { ui.toast((e as Error).message); }
+    setGating(false);
   };
 
   // saved diagrams: the figures kept so far (drafts stay on the Results page until kept)
@@ -85,7 +100,7 @@ export default function DataLab({ s }: { s: ExperimentState }) {
   const figId = lab.fig ?? null;
   const setFigId = (id: string | null) => ui.lab({ fig: id });
   const fig = saved.find((v) => v.spec.id === figId);
-  const askForFigure = () => { ui.leaveLab(); askInChat("Draw "); };
+  const askForFigure = () => { ui.leaveLab(); sendInChat("Draw a figure that answers the experiment's question"); };
   const lead = (v: (typeof saved)[number]) => (v.spec.caption ? `${v.spec.caption.split(". ")[0].replace(/\.$/, "")}.` : `From ${v.spec.table}.`);
 
   const name = (id?: string) => channels.find((c) => c.id === id)?.name ?? id ?? "";
@@ -96,7 +111,7 @@ export default function DataLab({ s }: { s: ExperimentState }) {
   ].filter((q) => has(q.x) && has(q.y));
   const GROUPS = [["scatter", "Scatter"], ["marker", "Markers"], ["time", "Time"]] as const;
 
-  const parentName = lab.parent ? byKey[lab.parent]?.name ?? lab.parent : "All events";
+  const parentName = lab.parent ? gateLabel(byKey[lab.parent]?.name ?? lab.parent) : "All events";
   const tool = lab.tool;
   const { data: kit } = useToolkit();
 
@@ -221,7 +236,8 @@ export default function DataLab({ s }: { s: ExperimentState }) {
         <div className="lt-r">
           <button className={`btn sm lab-ask-btn${lab.ask ? " on" : " plain"}`} id="lab-ask" aria-pressed={lab.ask} title="The lab assistant: ask for any view of the events (⌘J)"
             onClick={() => ui.lab({ ask: !lab.ask })}><Bloom p={1} className="sm" /><span>Ask</span></button>
-          <button className="btn sm ink" disabled={!models?.available} title={models?.message}>Run the model</button>
+          <button className="btn sm ink" id="lab-autogate" disabled={!models?.available || !sample || gating} title={models?.message} onClick={gateThis}>
+            {gating ? "Gating…" : "Gate with the lab's models"}</button>
         </div>
       </header>
 
@@ -301,7 +317,7 @@ export default function DataLab({ s }: { s: ExperimentState }) {
                 return (
                   <button key={g.key} className="n-row" aria-selected={lab.sel === g.key} style={{ paddingLeft: 6 + Math.min(depth, 8) * 8 }}
                     onClick={() => select(g)} onDoubleClick={() => enter(g.key)} title={`${g.name}: click to show it on its own channels; double-click to look inside it`}>
-                    <span className="tw" /><span className="nm">{m ? m[1] : g.name}</span>
+                    <span className="tw" /><span className="nm">{gateLabel(m ? m[1] : g.name)}</span>
                     {m ? <span className={`n-pill ${g.draft ? "orange" : "gray"}`}>{m[2]}</span> : g.draft && <span className="n-pill orange">new</span>}
                     <span className="val">{g.pct_parent.toFixed(1)}%</span>
                   </button>
@@ -339,14 +355,26 @@ export default function DataLab({ s }: { s: ExperimentState }) {
                   <div className="n-h">Details<span>{sample ? shortSample(sample) : ""}</span></div>
                   {sel ? (
                     <>
-                      <div className="ln-big"><b>{sel.pct_parent.toFixed(2)}%</b><span>{sel.name} of {sel.parent ? byKey[sel.parent]?.name : "all events"}</span></div>
+                      <div className="ln-big"><b>{sel.pct_parent.toFixed(2)}%</b><span title={sel.name}>{gateLabel(sel.name)} of {sel.parent ? gateLabel(byKey[sel.parent]?.name ?? "") : "all events"}</span></div>
                       <div className="n-props">
                         <div className="n-prop"><span className="k"><Icon.hash />Events</span><span className="v">{fmt(sel.count)}</span></div>
                         <div className="n-prop"><span className="k"><Icon.hash />% of all</span><span className="v">{sel.pct_total.toFixed(3)}</span></div>
                         <div className="n-prop"><span className="k"><Icon.axis />Drawn on</span><span className="v">{sel.dims.map(short).join(" × ") || "—"}</span></div>
                         <div className="n-prop"><span className="k"><Icon.tag />From</span><span className="v"><span className={`n-pill ${pillClass(sel.source)}`}>{SRC[sel.source]}</span></span></div>
                       </div>
-                      {sel.draft && <div className="row-btns ln-keep"><button className="btn sm ink" onClick={() => decide(true)}>Keep this gate</button><button className="btn sm plain" onClick={() => decide(false)}>Undo</button></div>}
+                      {sel.draft && (
+                        <div className="row-btns ln-keep">
+                          {waiting > 1 ? (
+                            <>
+                              <button className="btn sm ink" onClick={() => decide(true, sel.key)} title="Keeps this gate and any waiting gates above it">Keep this gate</button>
+                              <button className="btn sm" onClick={() => decide(true)}>Keep all {waiting}</button>
+                              <button className="btn sm plain" onClick={() => decide(false, sel.key)} title="Drops this gate and any waiting gates below it">Undo this one</button>
+                            </>
+                          ) : (
+                            <><button className="btn sm ink" onClick={() => decide(true)}>Keep this gate</button><button className="btn sm plain" onClick={() => decide(false)}>Undo</button></>
+                          )}
+                        </div>
+                      )}
                     </>
                   ) : (
                     <>
@@ -357,8 +385,9 @@ export default function DataLab({ s }: { s: ExperimentState }) {
                 </div>
               </div>
               <div className="lab-extra" id="lab-extra">
-                {lab.sel && (
-                  <div className="ls-block"><div className="n-h">{sel?.name ?? ""} in every file</div>
+                {/* only for a gate that still exists (one just undone leaves nothing to show) */}
+                {sel && (
+                  <div className="ls-block"><div className="n-h">{gateLabel(sel.name)} in every file</div>
                     {/* one row per file, so any number of files fits the panel; a file without this gate shows a dash, not 0% */}
                     <div className="across">{(() => {
                       const mx = Math.max(1e-9, ...across.map((q) => q.g?.pct_parent ?? 0));
@@ -376,7 +405,7 @@ export default function DataLab({ s }: { s: ExperimentState }) {
                 )}
                 <div className="ls-key">
                   {lab.stage === "labels" ? (
-                    <div className="legend lab-leg">{children.map((g, i) => <span key={g.key}><i style={{ background: POP[i % POP.length] }} />{g.name}</span>)}<span><i style={{ background: "rgba(120,122,132,.6)" }} />the rest</span></div>
+                    <div className="legend lab-leg">{children.map((g, i) => <span key={g.key}><i style={{ background: POP[i % POP.length] }} />{gateLabel(g.name)}</span>)}<span><i style={{ background: "rgba(120,122,132,.6)" }} />the rest</span></div>
                   ) : lab.mode === "density" ? (
                     <div className="dens-key"><span>fewer events</span><i /><span>more</span></div>
                   ) : null}
@@ -451,7 +480,7 @@ function FileCell({ exp, sample, on, xLabel, yLabel }: { exp: string; sample: st
     <figure className={`lab-cell${on ? " on" : ""}`}>
       <figcaption>
         <button className="lc-name" onClick={open} title="Open this file on its own">{shortSample(sample)}</button>
-        <span>{plot ? `${fmt(plot.n_parent)} events` : "…"}{picked ? ` · ${picked.name} ${picked.pct_parent.toFixed(1)}%` : ""}</span>
+        <span>{plot ? `${fmt(plot.n_parent)} events` : "…"}{picked ? ` · ${gateLabel(picked.name)} ${picked.pct_parent.toFixed(1)}%` : ""}</span>
       </figcaption>
       {lab.mode === "hist" ? <LabHist data={plot} xLabel={xLabel} height={300} /> : (
         <LabPlot data={plot} gates={kids} x={lab.x ?? ""} y={lab.y ?? ""} xLabel={xLabel} yLabel={yLabel} mode={lab.mode} stage={lab.stage}

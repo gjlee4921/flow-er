@@ -214,7 +214,10 @@ def _question(ctx: Ctx, question: str, title: str | None = None) -> dict:
 _STEP = {"type": "object", "properties": {
     "id": {"type": "string"}, "op": {"type": "string", "enum": sorted(plan.OPS)}, "title": {"type": "string"},
     "inputs": {"type": "array", "items": {"type": "string"}}, "outputs": {"type": "array", "items": {"type": "string"}},
-    "why": {"type": "string"}, "gate": {"type": "string"}, "macro_id": {"type": "string"}},
+    "why": {"type": "string"}, "gate": {"type": "string"}, "macro_id": {"type": "string"},
+    "params": {"type": "object", "additionalProperties": True,
+               "description": "The step's settings. A view: chart (bar, dot, dumbbell, line, scatter, heatmap, table), x, y, color "
+                              "(columns of the table it reads) and title, so the run draws the figure. render_image: x and y channels."}},
     "required": ["id", "op", "title"]}
 
 

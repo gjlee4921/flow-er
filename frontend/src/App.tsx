@@ -12,6 +12,8 @@ import Rail from "./features/shell/Rail";
 import Start from "./features/study-sheet/Start";
 import { ui, useUi } from "./lib";
 
+const watched = new Set<string>();
+
 export default function App() {
   const qc = useQueryClient();
   const exp = useUi((u) => u.exp);
@@ -26,6 +28,16 @@ export default function App() {
   useEffect(() => { if (exp) api.projectOpened(exp).then(() => qc.invalidateQueries({ queryKey: ["experiments"] }), () => {}); }, [exp]); // eslint-disable-line react-hooks/exhaustive-deps
   // an experiment that no longer exists (deleted, or a different machine) sends us back to the start
   useEffect(() => { if (error) ui.openProject(null); }, [error]);
+  // when a run starts gating with the lab's models, the data lab opens to show them at work (once a run)
+  const run = useUi((u) => u.run);
+  useEffect(() => {
+    if (!run || run.exp !== exp || watched.has(run.id)) return;
+    if (Object.values(run.nodes).some((n) => n.op === "autogate" && n.status === "running")) {
+      watched.add(run.id);
+      ui.lab({ live: true, view: "plot", compare: false });
+      ui.open("lab");
+    }
+  }, [run, exp]);
   // opening an experiment that already has a plan shows the plan, not the empty panel
   useEffect(() => { if (state && ui.get().page === "none" && (state.plan.length || state.draft)) ui.open("flow"); }, [state?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {

@@ -263,10 +263,11 @@ def try_real(code: str, inputs: dict[str, Path], params: dict) -> str | None:
 
 
 def run_step(exp_id: str, step: dict, macro: dict, table_for: dict[str, str], samples: list[str] | None = None,
-             events_from: dict[str, Path] | None = None) -> dict:
+             events_from: dict[str, Path] | None = None, save: bool = True) -> dict:
     """Run a kept script for its step. `table_for` maps each input that is a table to the saved table
     it names; `events_from` maps an input that is another script's events to the folder they are in.
-    Tables it returns are saved as <step>_<output>; events it returns are kept in derived/<step>/."""
+    Tables it returns are saved as <step>_<output>; events it returns are kept in derived/<step>/.
+    With save=False it is a sandbox try: nothing is kept, and what it made comes back to look at."""
     c = check(macro["code"])
     if not c["ok"]:
         return {"status": "failed", "summary": "The script no longer passes its checks: " + "; ".join(c["problems"])}
@@ -294,6 +295,10 @@ def run_step(exp_id: str, step: dict, macro: dict, table_for: dict[str, str], sa
         r = sandbox.run(macro["code"], inputs, tmp / "out", params)
         if r["status"] != "done":
             return {"status": "failed", "summary": f"The script stopped: {r['error']}"}
+        if not save:
+            one = (samples or [None])[0]
+            return {"status": "done", "seconds": r["seconds"], "outputs": _peek(r["outputs"], sample=one),
+                    "inputs": {port: _peek({port: path}, sample=one)[port] for port, path in inputs.items()}}
         saved = []
         for name, path in r["outputs"].items():
             if path.is_file():
@@ -313,6 +318,29 @@ def run_step(exp_id: str, step: dict, macro: dict, table_for: dict[str, str], sa
                 "hash": r["hash"]}
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _peek(outputs: dict[str, Path], rows: int = 20, sample: str | None = None) -> dict:
+    """What a script made, to look at: a table's first rows and its size, or for events the files
+    and how many events they hold. With `sample`, a table that names files shows that file's rows."""
+    out = {}
+    for name, path in outputs.items():
+        path = Path(path)
+        if path.is_file():
+            with open(path, newline="") as f:
+                data = list(csv.reader(f))
+            cols, body = (data[0], data[1:]) if data else ([], [])
+            mine = [r for r in body if sample and "sample" in cols and r[cols.index("sample")] == sample]
+            out[name] = {"kind": "table", "columns": cols, "rows": (mine or body)[:rows], "total": len(body),
+                         "for_file": len(mine) if mine else None}
+        elif path.is_dir():
+            files = sorted(path.glob("*.npz"))
+            per = {}
+            for f in files:
+                with np.load(f, allow_pickle=False) as z:
+                    per[f.stem] = len(z["data"]) if "data" in z.files else int(z["grid"].sum()) if "grid" in z.files else 0
+            out[name] = {"kind": "events", "files": len(files), "per_file": per, "events": sum(per.values())}
+    return out
 
 
 def describe(macro: dict) -> dict:

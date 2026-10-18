@@ -63,3 +63,10 @@
 .rp-pick b { color: var(--text); }
 .rp-pick button { all: unset; cursor: pointer; font-size: 12px; padding: 3px 9px; border-radius: 999px; color: var(--text-3); }
 .rp-pick button:hover { background: var(--hover); color: var(--text); }
+
+/* a figure's ⋯ menu: Expand, Show the data, Copy as CSV */
+.rp-more { position: relative; display: inline-flex; }
+.rp-menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; display: grid; min-width: 150px; padding: 4px; background: var(--raised); border: 1px solid var(--sep-2); border-radius: var(--r-ctl); box-shadow: var(--shadow-pop); }
+.rp-menu button { all: unset; cursor: pointer; font-size: 12.5px; color: var(--text); padding: 6px 9px; border-radius: 6px; white-space: nowrap; }
+.rp-menu button:hover, .rp-menu button:focus-visible { background: var(--hover); }
+.rp-outline a.on { background: var(--sel); }

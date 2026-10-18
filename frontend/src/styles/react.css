@@ -362,8 +362,15 @@
 .flow-tools .btn .i { width: 13px; height: 13px; }
 .flow-tools .btn.ink { display: inline-flex; align-items: center; gap: 6px; }
 .flow-tools .btn.on { background: var(--fill); }
-.flow-switch { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--sep-2); border-radius: var(--r-ctl); background: var(--raised); font-size: 12.5px; color: var(--text-2); cursor: pointer; }
-.flow-switch input { accent-color: var(--fl-core); }
+/* a switch, not a checkbox: a rounded-rectangle track (never a pill) that turns flower pink when on */
+.flow-switch { all: unset; display: inline-flex; align-items: center; gap: 8px; padding: 4px 10px 4px 7px; border: 1px solid var(--sep-2); border-radius: var(--r-ctl); background: var(--raised); font-size: 12.5px; color: var(--text-2); cursor: pointer; transition: background .15s, border-color .15s; }
+.flow-switch:hover { background: var(--hover); }
+.flow-switch .sw { position: relative; flex: none; width: 26px; height: 16px; border-radius: 5px; background: var(--fill); box-shadow: inset 0 0 0 1px var(--sep-2); transition: background .15s; }
+.flow-switch .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 3px; background: var(--raised); box-shadow: 0 1px 2px rgba(0,0,0,.22); transition: transform .18s var(--ease); }
+.flow-switch.on { color: var(--text); background: var(--sel); border-color: var(--sel-line); }
+.flow-switch.on .sw { background: var(--fl-core); box-shadow: none; }
+.flow-switch.on .sw::after { transform: translateX(10px); }
+.flow-switch:focus-visible { outline: 2px solid var(--fl-core); outline-offset: 2px; }
 .flow-banner .link { all: unset; cursor: pointer; text-decoration: underline; color: var(--text); margin-left: 4px; }
 .runs-panel { position: absolute; top: 60px; right: 12px; bottom: 12px; width: 280px; background: var(--raised); border: 1px solid var(--sep-2); border-radius: 14px; box-shadow: var(--shadow-pop); z-index: 6; display: flex; flex-direction: column; overflow: hidden; }
 .runs-list { overflow-y: auto; padding: 6px; display: grid; gap: 2px; align-content: start; }
@@ -425,11 +432,88 @@
 /* the autogate step's panel: per-gate table with the unsure ones flagged, actions, the lab's versions */
 .ag-panel { display: grid; gap: 10px; min-width: 0; margin-bottom: 8px; }
 .ag-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.ag-tbl td:first-child { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ag-tbl { width: 100%; }
+.ag-tbl td, .ag-tbl th { white-space: nowrap; }
+.ag-tbl td:first-child { max-width: 128px; overflow: hidden; text-overflow: ellipsis; }
+.ag-tbl .ag-fj { color: var(--text-3); }
+.ag-dot { display: inline-block; width: 7px; height: 7px; margin-left: 5px; border-radius: 2px; background: var(--c-flag); vertical-align: 1px; }
 .ag-tbl tr.ag-unsure td { background: color-mix(in srgb, var(--c-flag) 7%, transparent); }
 .ag-flag { margin-left: 6px; font-size: 10.5px; font-weight: 600; padding: 1px 6px; border-radius: var(--r-tag); color: var(--c-flag); background: color-mix(in srgb, var(--c-flag) 10%, var(--raised)); }
 .ag-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .ag-models ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
 .ag-models li { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; color: var(--text-2); }
-.ag-models li small { color: var(--text-3); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ag-models li small { color: var(--text-3); min-width: 0; }
+.ag-versions summary { cursor: pointer; font-size: 12.5px; color: var(--text-2); list-style: none; }
+.ag-versions summary::-webkit-details-marker { display: none; }
+.ag-versions summary::before { content: "▸ "; color: var(--text-3); }
+.ag-versions[open] summary::before { content: "▾ "; }
 .ag-models li.on > span:first-child { font-weight: 600; color: var(--text); }
+
+/* Selected things wear the flower pink: the page you are on, the gate, file or step you picked, the tab
+   you are in. Data keeps its own colours; pink only says "this one". */
+:root { --sel: color-mix(in srgb, var(--fl) 15%, transparent); --sel-hover: color-mix(in srgb, var(--fl) 22%, transparent); --sel-line: color-mix(in srgb, var(--fl-core) 55%, var(--sep-2)); }
+.pnav[aria-current="true"], .si[aria-current="true"] { background: var(--sel); }
+.pnav[aria-current="true"] .pic { color: var(--fl-core); }
+.n-row[aria-selected="true"] { background: var(--sel); }
+.n-row[aria-selected="true"]:hover { background: var(--sel-hover); }
+.flow-rf .react-flow__node.selected .node, .flow-rf .node.sel, .node.sel { border-color: var(--fl-core); box-shadow: 0 0 0 3px var(--sel), var(--shadow); }
+.np-tab[aria-selected="true"] { border-bottom-color: var(--fl-core); }
+.lt-views .n-tab[aria-selected="true"] { box-shadow: inset 0 -2px 0 var(--fl-core); }
+.across .ab.on { background: var(--sel); }
+.ds-card.on { border-color: var(--fl-core); box-shadow: 0 0 0 3px var(--sel); }
+.run-item.on, .flow-tools .btn.on { background: var(--sel); }
+.n-tbl tbody tr[aria-selected="true"] td { background: var(--sel); }
+.rp-outline a.on { background: var(--sel); }
+.lab-cell.on { box-shadow: 0 0 0 2px var(--fl-core); }
+/* the box you are typing in, or the menu you have open, rings in the same pink */
+.composer:focus-within { border-color: var(--sel-line); box-shadow: 0 0 0 3px var(--sel), var(--shadow); }
+.composer.over { border-color: var(--fl-core); box-shadow: 0 0 0 3px var(--sel); }
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):focus-visible, select:focus-visible, .ctx textarea:focus {
+  outline: none; border-color: var(--fl-core); box-shadow: 0 0 0 3px var(--sel); }
+
+/* buttons answer the pointer in pink: a pink wash on plain buttons, the flower pink on the dark ones */
+.btn:not(.ink):not(:disabled):hover { background: var(--hover); border-color: var(--sel-line); color: var(--text); }
+.btn.ink:not(:disabled):hover { background: var(--fl-core); border-color: var(--fl-core); opacity: 1; }
+.btn.plain:not(:disabled):hover { border-color: transparent; }
+.suggest button:hover, .ag-sug button:hover, .tb:hover { border-color: var(--sel-line); }
+.btn { transition: background .15s, border-color .15s, transform .1s; }
+
+/* the start page's way back into the last project */
+.st-continue { all: unset; display: flex; align-items: center; gap: 10px; padding: 11px 14px; border: 1px solid var(--sep-2); border-radius: var(--r-ctl); background: var(--raised); cursor: pointer; font-size: 14px; transition: background .15s, border-color .15s; }
+.st-continue:hover { background: var(--hover); border-color: var(--sel-line); }
+.st-continue .k { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--fl-core); }
+.st-continue b { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-continue .d { margin-left: auto; color: var(--text-3); font-size: 12.5px; white-space: nowrap; }
+.st-continue .i { width: 12px; height: 12px; color: var(--text-3); flex: none; }
+.st-continue:focus-visible { outline: 2px solid var(--fl-core); outline-offset: 2px; }
+
+/* the key that does the same as a button (K keep, U undo) */
+.btn kbd { margin-left: 6px; font: 600 10px var(--font); padding: 0 4px; border-radius: 4px; border: 1px solid currentColor; opacity: .55; line-height: 1.5; }
+
+/* the canvas, with a step's details floating over its right side */
+.flow-split { position: relative; height: 100%; min-height: 0; min-width: 0; }
+.flow-split > .flow-wrap.flow-rf { height: 100%; }
+
+
+
+/* Watching the models gate the files (the data lab, read-only, while a run does it) */
+.live-dot { display: inline-block; width: 7px; height: 7px; border-radius: 2px; background: var(--fl-core); animation: lspulse 1s ease-in-out infinite; flex: none; }
+.ll-prog { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-2); white-space: nowrap; }
+.ll-bar { width: 120px; height: 4px; border-radius: 2px; background: var(--fill); overflow: hidden; }
+.ll-bar i { display: block; height: 100%; background: var(--fl-core); transition: width .4s var(--ease); }
+.ll-acts { display: flex; gap: 6px; justify-content: flex-end; }
+.ll-stage { display: grid; grid-template-columns: minmax(0, 1fr) clamp(260px, 30%, 360px); gap: 20px; padding: 18px 20px; min-height: 0; overflow: auto; }
+.ll-plot { display: grid; place-items: center; min-width: 0; min-height: 0; }
+.ll-axes { position: relative; padding: 0 0 22px 22px; box-sizing: content-box; }
+.ll-axes canvas { display: block; border-radius: 6px; }
+.ll-x { position: absolute; left: 22px; right: 0; bottom: 0; text-align: center; font-size: 11.5px; color: var(--text-3); }
+.ll-y { position: absolute; left: 0; top: 0; bottom: 22px; writing-mode: vertical-rl; transform: rotate(180deg); text-align: center; font-size: 11.5px; color: var(--text-3); }
+.ll-side { display: grid; align-content: start; gap: 12px; min-width: 0; }
+.ll-end { display: grid; gap: 8px; padding: 12px 14px; border: 1px solid var(--sel-line); border-radius: var(--r-ctl); background: var(--sel); font-size: 13.5px; }
+.live-lab .n-row:disabled { opacity: .45; cursor: default; }
+.live-lab .n-row .tw .i { width: 12px; height: 12px; color: #5f8a6c; }
+@media (max-width: 900px) { .ll-stage { grid-template-columns: minmax(0, 1fr); } }
+/* the lab assistant floats like the main page's workflow panel: inset, rounded, lifted */
+.lab-ask { margin: 10px 10px 10px 2px; border: 1px solid var(--sep-2); border-radius: 20px; overflow: hidden;
+  box-shadow: 0 14px 44px rgba(0,0,0,.13), 0 2px 8px rgba(0,0,0,.05); }
+@media (max-width: 900px) { .lab-ask { margin: 8px; border: 1px solid var(--sep-2); } }

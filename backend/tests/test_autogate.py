@@ -78,6 +78,10 @@ def test_lab_als_gates_an_unseen_file_like_the_expert(tmp_path, monkeypatch):
         assert "/unito/" in g["model"] and g["f1"] >= 0.9, (g["gate"], g["model"], g.get("f1"))
     review = models.review(exp, "HC Specimen_001_C5_C05 Peptide.fcs")
     assert len(review["gates"]) == 15 and all(k.endswith("(model)") for k in review["gates"])
+    # moving a gate goes through the result kept in memory (the path Teach the models takes too)
+    cd3 = next(g for g in body["gates"] if g["gate"].endswith("/CD3"))
+    moved = models.edit(exp, "HC Specimen_001_C5_C05 Peptide.fcs", cd3["gate"], cd3["polygon"]["display"])
+    assert moved["edited"] and any(g["model"] == "user" for g in moved["gates"])
 
 
 @needs_als
@@ -106,3 +110,13 @@ def test_raw_files_with_no_workspace_are_gated_by_the_lab_their_panel_matches(tm
     review = models.review(exp, sid)
     assert len(review["gates"]) == 15
     assert "Lymphocytes (model)/Single Cells 1 (model)" in review["gates"]
+
+
+def test_organ_and_mouse_come_from_tissue_file_names_and_a_samples_sheet_adds_the_diet(tmp_path):
+    """Tissue studies name files <Organ>_<tube>; the tube is the animal. A samples.csv beside the
+    files says the rest (the diet), under the column names a lab would use."""
+    rows = {r["sample"]: r for r in samplemeta.infer(["Aorta_3.fcs", "Spleen_3.fcs", "Bone marrow_12.fcs"])}
+    assert rows["Aorta_3.fcs"]["organ"] == "aorta" and rows["Aorta_3.fcs"]["individual"] == "mouse 3"
+    assert rows["Spleen_3.fcs"]["individual"] == "mouse 3" and rows["Bone marrow_12.fcs"]["organ"] == "bone marrow"
+    (tmp_path / "samples.csv").write_text("Sample,Mouse,Tissue,Diet\nAorta_3.fcs,mouse 3,aorta,western diet\n")
+    assert samplemeta.sheet(tmp_path) == {"Aorta_3.fcs": {"individual": "mouse 3", "organ": "aorta", "condition": "western diet"}}

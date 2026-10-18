@@ -71,6 +71,8 @@ export type PlotData = {
   sample: string; x: number[]; y: number[]; label: number[];
   children: { key: string; name: string; source: string; dims: string[]; vertices: number[][] }[];
   parent: string | null; n_parent: number; n_shown: number; stage: string;
+  /** where round channel values sit on each axis, in display units: 0, 10², 10³... or 0, 50K, 100K... */
+  x_ticks?: { v: number; label: string }[]; y_ticks?: { v: number; label: string }[];
 };
 
 export type Memory = { id: string; text: string; kind: "definition" | "preference" | "lab" | "project"; quote: string;
@@ -82,6 +84,7 @@ export type NodeType = { name: string; kind: string; takes: string[]; makes: str
   params?: Record<string, { label: string; enum?: string[]; default?: string; names?: Record<string, string>; choices?: "channels" | "gates" }> };
 export type StepImage = { port: string; role: "input" | "output"; kind: string; grid: number[][]; meta: { x?: string; y?: string; parent?: string; recipe?: string; events?: number } };
 /** One file gated by the lab's models: per gate the polygon, numbers, which model answered and how sure it was. */
+export type AutogateLive = { running: boolean; files: string[]; done: string[]; fresh: string[]; current: string | null; lab: string | null; version: string };
 export type AutogateGate = {
   gate: string; parent: string; x: string; y: string; model: string; count: number; parent_count: number; percent_of_parent: number;
   confidence: number | null; low_confidence: boolean; flowjo_pct?: number; f1?: number; error_pp?: number;
@@ -194,8 +197,8 @@ export const api = {
   drawGate: (id: string, g: { name: string; parent: string | null; dims: string[]; vertices: number[][]; kind: string }) =>
     req<{ draft: Draft; gate: GateNode }>("POST", `/experiments/${id}/gates`, g),
   runStep: (id: string, step: string) => req<Run>("POST", `/experiments/${id}/steps/${encodeURIComponent(step)}/run`),
-  keep: (id: string) => req<{ kept: Draft }>("POST", `/experiments/${id}/keep`),
-  undo: (id: string) => req<{ dropped: Draft }>("POST", `/experiments/${id}/undo`),
+  keep: (id: string, gate?: string) => req<{ kept: Draft }>("POST", `/experiments/${id}/keep${gate ? `?gate=${encodeURIComponent(gate)}` : ""}`),
+  undo: (id: string, gate?: string) => req<{ dropped: Draft }>("POST", `/experiments/${id}/undo${gate ? `?gate=${encodeURIComponent(gate)}` : ""}`),
   messages: (id: string) => req<Message[]>("GET", `/experiments/${id}/messages`),
   chat: (id: string, text: string, attachments: string[] = []) => req<Message>("POST", `/experiments/${id}/chat`, { text, attachments }),
   chatStream: (id: string, text: string, attachments: string[], onEvent: (e: TurnEvent) => void) =>
@@ -218,6 +221,8 @@ export const api = {
     req<{ files: string[]; file?: string; images: StepImage[] }>("GET", `/experiments/${id}/steps/${encodeURIComponent(step)}/images${q({ file })}`),
   autogateFiles: (id: string) => req<{ lab: string | null; version: string; files: { sample: string; gated: boolean }[] }>("GET", `/experiments/${id}/autogate`),
   autogateResult: (id: string, sample: string) => req<AutogateResult>("GET", `/experiments/${id}/autogate/${encodeURIComponent(sample)}/result`),
+  /** the models at work: the run's files, the one being gated now, those done (and done just now) */
+  autogateLive: (id: string) => req<AutogateLive>("GET", `/experiments/${id}/autogate/live`),
   autogateReview: (id: string, sample: string) =>
     req<{ gates: string[]; sample: string; parent: string | null; x: string; y: string; gate: string }>("POST", `/experiments/${id}/autogate/${encodeURIComponent(sample)}/review`),
   autogateAccept: (id: string, sample: string) =>

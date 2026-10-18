@@ -41,8 +41,9 @@ export function followRun(exp: string, id: string, qc?: QueryClient) {
 
 export const useStepImages = (id: string | null, step: string | null, file?: string, on = true) =>
   useQuery({ queryKey: ["exp", id, "images", step, file], queryFn: () => api.stepImages(id!, step!, file), enabled: !!id && !!step && on });
-export const useAutogateFiles = (id: string | null, on = true) =>
-  useQuery({ queryKey: ["exp", id, "autogate"], queryFn: () => api.autogateFiles(id!), enabled: !!id && on });
+/** Which files have model gates; `every` (ms) keeps asking while a run gates them one by one. */
+export const useAutogateFiles = (id: string | null, on = true, every: number | false = false) =>
+  useQuery({ queryKey: ["exp", id, "autogate"], queryFn: () => api.autogateFiles(id!), enabled: !!id && on, refetchInterval: every });
 export const useAutogateResult = (id: string | null, sample?: string) =>
   useQuery({ queryKey: ["exp", id, "autogate", sample], queryFn: () => api.autogateResult(id!, sample!), enabled: !!id && !!sample });
 export const useLabModels = (lab?: string | null) =>

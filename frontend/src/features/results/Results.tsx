@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { type ExperimentState } from "../../api";
 import { useTable } from "../../api/hooks";
 import { fmt, shortSample } from "../../lib";
-import { askInChat } from "../agent/Chat";
+import { sendInChat } from "../agent/Chat";
 import { Report } from "./Report";
 
 export function Results({ s }: { s: ExperimentState }) {
@@ -27,7 +27,7 @@ export function Measure({ s }: { s: ExperimentState }) {
       </div>
       {!rows.length ? (
         <div className="empty-in"><p>Nothing measured yet. Run the measure step of the plan, and every gate in every file is counted here.</p>
-          <button className="btn sm" onClick={() => askInChat("Run the plan")}>Run the plan</button></div>
+          <button className="btn sm" onClick={() => sendInChat("Run the plan")}>Run the plan</button></div>
       ) : (
         <>
           <div className="n-h">Population table<span>tables/population_stats.csv · {rows.length} rows</span></div>

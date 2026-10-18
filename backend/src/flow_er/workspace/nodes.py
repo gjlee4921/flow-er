@@ -30,18 +30,22 @@ NODE_TYPES: dict[str, dict] = {
     "train_gate_model": {"name": "Train a gate model", "kind": "model", "takes": ["labels", "events", "samples", "gates"], "makes": "model", "version": "1",
                          "about": "Retrain the lab's gate models on the gates the scientist kept (flow_er.ml); a new version is used only if it is better."},
     "autogate": {"name": "Gate with the lab's models", "kind": "model", "takes": ["samples", "events", "labels", "gates"], "makes": "table",
-                 "version": "1", "reads_models": True,
-                 "about": "Gate every file with the lab's trained models (a per-gate U-Net, else the lab's template): per gate the count, "
-                          "% of parent, which model answered and how sure it was, and FlowJo's % and an F1 where FlowJo gates exist. "
-                          "The model gates are drafts the scientist reviews and keeps in the data lab.",
+                 "version": "2", "reads_models": True,
+                 "about": "Gate every file with the lab's trained models (a per-gate U-Net, else the lab's template). Its table, "
+                          "autogate_counts, has per file and gate: sample, individual, group (e.g. ALS or HC), condition (e.g. "
+                          "Negative or Peptide), gate, gate_name, parent, count, pct_parent, model, confidence, low_confidence, and "
+                          "FlowJo's % and an F1 where FlowJo gates exist. These are the models' numbers (population_stats counts "
+                          "FlowJo's or the scientist's gates, not the models'). The model gates are drafts reviewed in the data lab.",
                  "columns": {"sample": "the FCS file name", "gate": "the gate's full path", "model": "which model answered (or template_copy)",
                              "confidence": "how sure the model was near the gate's edge, 0-1 (blank for template copies)",
                              "low_confidence": "true when the gate should be reviewed", "count": "events in the gate",
                              "pct_parent": "% of its parent", "flowjo_pct": "FlowJo's % of parent, where known", "f1": "agreement with FlowJo's gate, 0-1"}},
-    "population_stats": {"name": "Count every gate", "kind": "measure", "takes": ["labels", "events", "gates", "samples", "model"], "makes": "table", "version": "2",
+    "population_stats": {"name": "Count every gate", "kind": "measure", "takes": ["labels", "events", "gates", "samples", "model"], "makes": "table", "version": "3",
                          "about": "Count every gate in every sample: count, % of parent, % of total.", "reads_gates": True,
                          # what a script reading this table is told, so its fixture looks like the real thing
-                         "columns": {"sample": "the FCS file name", "gate": "the gate's own name, e.g. CD3+",
+                         "columns": {"sample": "the FCS file name", "individual": "the person or animal it came from",
+                                     "organ": "the organ or tissue, when the files say", "condition": "the condition, diet or group",
+                                     "gate": "the gate's own name, e.g. CD3+",
                                      "gate_path": "its full path from the top, e.g. Time/Singlets/aAmine-/CD3+",
                                      "parent": "the parent's gate_path ('' for a top gate)", "source": "flowjo or user",
                                      "count": "events in the gate", "pct_parent": "% of its parent", "pct_total": "% of all events"}},
@@ -49,8 +53,14 @@ NODE_TYPES: dict[str, dict] = {
                      "about": "A Prism-ready CSV: one row per file, one column per gate.",
                      "params": {"value": {"label": "Value in each cell", "enum": ["pct_parent", "count", "pct_total"], "default": "pct_parent",
                                           "names": {"pct_parent": "% of parent", "count": "Count", "pct_total": "% of total"}}}},
-    "view": {"name": "Figure", "kind": "view", "takes": ["table"], "makes": "figure", "version": "1",
-             "about": "A figure drawn from a saved table."},
+    "view": {"name": "Figure", "kind": "view", "takes": ["table"], "makes": "figure", "version": "2",
+             "about": "A figure drawn from the table it reads. With a chart named (chart, x, y, colour: columns of "
+                      "that table), the run draws it as a draft that waits on the results page for Keep.",
+             "params": {"chart": {"label": "Chart", "enum": [None, "bar", "dot", "dumbbell", "line", "scatter", "heatmap", "table"], "default": None},
+                        "x": {"label": "Across (a column)"}, "y": {"label": "Value (a column)"}, "color": {"label": "Colour by (a column)"},
+                        "title": {"label": "Title"}, "y_label": {"label": "Value label"},
+                        "filter": {"label": "Only rows where (column: value or [values])"},
+                        "agg": {"label": "Combine rows", "enum": ["none", "mean", "sum", "max", "min"], "default": "none"}}},
 }
 
 
@@ -138,26 +148,54 @@ def run(exp_id: str, step: dict, samples: list[str] | None = None) -> dict:
     if op == "custom_macro":
         if not step.get("script"):
             return {"status": "blocked", "summary": "This script step has no script yet."}
-        # each input that is a table: the table its step saved when it last ran
-        plan_steps = store.state(exp_id, "plan")
-        made_by = {o: s["id"] for s in plan_steps for o in s.get("outputs", [])}
-        last = {r["step"]: r for r in store.state(exp_id, "runs")}
-        table_for = {i: last.get(made_by.get(i, ""), {}).get("table") for i in step.get("inputs", [])}
-        by_id = {s["id"]: s for s in plan_steps}
-        events_from = {}  # inputs that are another script's events: the folder it left them in
-        for i in step.get("inputs", []):
-            src = by_id.get(made_by.get(i, ""))
-            if src and src.get("op") == "render_image":
-                events_from[i] = output_folder(exp_id, src, i)
-            elif src and src.get("op") == "custom_macro" and src.get("script"):
-                outs = list(scripts.check(src["script"]["code"]).get("outputs") or {})
-                port = dict(zip(src["outputs"], outs)).get(i)
-                if port:
-                    events_from[i] = store.path(exp_id, "derived", src["id"], port)
+        table_for, events_from = script_inputs(exp_id, step)
         return scripts.run_step(exp_id, step, step["script"], table_for, samples, events_from)
     if op == "view":
-        return {"status": "done", "summary": "Figures draw themselves from their table."}
+        return _draw(exp_id, step)
     return {"status": "failed", "summary": f"No step of kind {op}."}
+
+
+def _draw(exp_id: str, step: dict) -> dict:
+    """A figure step: with a chart named, the figure drawn from the table it reads, as a draft for
+    Keep (so a run that measures can end on its figure); without one, nothing to do."""
+    from flow_er.workspace import views
+    p = step.get("params") or {}
+    if not p.get("chart") or not p.get("y"):
+        return {"status": "done", "summary": "Figures draw themselves from their table."}
+    inp = (step.get("inputs") or [None])[0]
+    table = inp if inp and store.path(exp_id, "tables", f"{inp}.csv").exists() else script_inputs(exp_id, step)[0].get(inp)
+    spec = {"title": p.get("title") or step.get("title"), "type": p["chart"], "table": table, "x": p.get("x"), "y": p["y"],
+            "color": p.get("color"), "agg": p.get("agg") or "none", "y_label": p.get("y_label"), "filter": p.get("filter") or {},
+            "caption": step.get("why") or ""}
+    try:
+        v = views.validate(exp_id, spec)
+    except ValueError as e:
+        return {"status": "failed", "summary": f"The figure could not be drawn: {e}"}
+    if store.draft(exp_id):
+        return {"status": "done", "summary": f"The figure is ready to draw from {table}; keep or undo what is waiting, then run again."}
+    store.set_draft(exp_id, "view", v, f"A {v['type']} view: {v['title']}")
+    return {"status": "done", "summary": f"Drew '{v['title']}' from {table}; it waits on the results page for Keep."}
+
+
+def script_inputs(exp_id: str, step: dict) -> tuple[dict, dict]:
+    """What a script step reads: for each table input the table its step saved when it last ran, and
+    for each input that is another step's events or images the folder they were left in."""
+    plan_steps = store.state(exp_id, "plan")
+    made_by = {o: s["id"] for s in plan_steps for o in s.get("outputs", [])}
+    last = {r["step"]: r for r in store.state(exp_id, "runs")}
+    table_for = {i: last.get(made_by.get(i, ""), {}).get("table") for i in step.get("inputs", [])}
+    by_id = {s["id"]: s for s in plan_steps}
+    events_from = {}  # inputs that are another script's events: the folder it left them in
+    for i in step.get("inputs", []):
+        src = by_id.get(made_by.get(i, ""))
+        if src and src.get("op") == "render_image":
+            events_from[i] = output_folder(exp_id, src, i)
+        elif src and src.get("op") == "custom_macro" and src.get("script"):
+            outs = list(scripts.check(src["script"]["code"]).get("outputs") or {})
+            port = dict(zip(src["outputs"], outs)).get(i)
+            if port:
+                events_from[i] = store.path(exp_id, "derived", src["id"], port)
+    return table_for, events_from
 
 
 def output_folder(exp_id: str, step: dict, output: str):

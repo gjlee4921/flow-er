@@ -123,21 +123,23 @@ def upload(exp_id: str, files: list[UploadFile]) -> dict:
 
 
 @router.post("/experiments/{exp_id}/keep")
-def keep(exp_id: str) -> dict:
+def keep(exp_id: str, gate: str | None = None) -> dict:
+    """Keep what is waiting; with `gate`, just that gate of a gate draft (and the draft gates above it)."""
     _get(exp_id)
-    d = store.keep(exp_id)
+    d = store.keep_gate(exp_id, gate) if gate else store.keep(exp_id)
     if not d:
-        raise HTTPException(409, "nothing is waiting to be kept")
+        raise HTTPException(409, f"no waiting gate {gate}" if gate else "nothing is waiting to be kept")
     lab.after_change(exp_id, d["kind"])
     return {"kept": d}
 
 
 @router.post("/experiments/{exp_id}/undo")
-def undo(exp_id: str) -> dict:
+def undo(exp_id: str, gate: str | None = None) -> dict:
+    """Drop what is waiting; with `gate`, just that gate of a gate draft (and the draft gates below it)."""
     _get(exp_id)
-    d = store.undo(exp_id)
+    d = store.undo_gate(exp_id, gate) if gate else store.undo(exp_id)
     if not d:
-        raise HTTPException(409, "nothing is waiting to be undone")
+        raise HTTPException(409, f"no waiting gate {gate}" if gate else "nothing is waiting to be undone")
     lab.after_change(exp_id, d["kind"])
     return {"dropped": d}
 

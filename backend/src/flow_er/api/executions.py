@@ -167,3 +167,21 @@ def active(exp_id: str, body: ActiveIn) -> dict:
     """The new-files trigger: run the workflow when FCS files arrive in the data folder."""
     _exp(exp_id)
     return executor.watch(exp_id, body.on)
+
+
+@router.post("/experiments/{exp_id}/steps/{step}/try")
+def try_step(exp_id: str, step: str, sample: str | None = None) -> dict:
+    """A script step tried on one file in the sandbox, to see what it does to that file's data before
+    (or without) a run: its inputs and what it made. Nothing is kept."""
+    from flow_er.workspace import scripts
+    s = next((x for x in store.state(exp_id, "plan") if x["id"] == step), None)
+    if not s:
+        raise HTTPException(404, f"no kept step {step}")
+    if s.get("op") != "custom_macro" or not s.get("script"):
+        raise HTTPException(400, "only a script step can be tried in the sandbox")
+    ids = lab.dataset(exp_id).sample_ids
+    sid = sample or ids[0]
+    if sid not in ids:
+        raise HTTPException(404, f"no sample {sid}")
+    table_for, events_from = nodes.script_inputs(exp_id, s)
+    return {"sample": sid, **scripts.run_step(exp_id, s, s["script"], table_for, [sid], events_from, save=False)}

@@ -213,17 +213,52 @@ def _live(exp_id: str, sid: str):
     return res
 
 
+# the models at work, per experiment (named apart from _live(), the gating results in memory)
+_progress: dict[str, dict] = {}
+
+
+def live(exp_id: str) -> dict:
+    """The models at work, for watching: the files of the run, which is being gated now, which are done
+    and which of those were gated just now (the rest were reused from an earlier run)."""
+    st = _progress.get(exp_id)
+    if st is None:
+        # no run since the app started: the files gated so far, to watch again
+        ids = labmod.dataset(exp_id).sample_ids
+        st = {"running": False, "files": ids, "done": [s for s in ids if _path(exp_id, s).exists()], "fresh": [], "current": None}
+    return {**st, "done": list(st["done"]), "fresh": list(st["fresh"]), "lab": lab_for(exp_id), "version": version(exp_id)}
+
+
 def table(exp_id: str, samples: list[str] | None = None) -> list[dict]:
-    """One row per file and gate, from the cached results: what the autogate step saves."""
+    """One row per file and gate, from the cached results: what the autogate step saves. Progress goes
+    to live() as each file is gated, so the data lab can show the models working."""
     rows = []
-    for sid in samples or labmod.dataset(exp_id).sample_ids:
-        body = result(exp_id, sid) or autogate(exp_id, sid)
-        for g in body["gates"]:
-            rows.append({"sample": sid, "gate": g["gate"], "model": g["model"],
-                         "confidence": g["confidence"] if g["confidence"] is not None else "",
-                         "low_confidence": bool(g["low_confidence"]), "count": g["count"], "pct_parent": g["percent_of_parent"],
-                         "flowjo_pct": g.get("flowjo_pct", ""), "f1": g.get("f1", "")})
+    ids = list(samples or labmod.dataset(exp_id).sample_ids)
+    st = _progress[exp_id] = {"running": True, "files": ids, "done": [], "fresh": [], "current": None, "started": store.now()}
+    try:
+        for sid in ids:
+            st["current"] = sid
+            body = result(exp_id, sid)
+            if body is None:
+                body = autogate(exp_id, sid)
+                st["fresh"].append(sid)
+            st["done"].append(sid)
+            rows += _rows(sid, body, samplemeta.of(exp_id, sid))
+    finally:
+        st["running"], st["current"], st["finished"] = False, None, store.now()
     return rows
+
+
+def _rows(sid: str, body: dict, meta: dict | None = None) -> list[dict]:
+    """The table's rows for one file: who it came from (individual, the group their label starts with,
+    the condition) beside each gate's numbers, so a figure can set ALS against HC straight from it."""
+    meta = meta or {}
+    ind = meta.get("individual") or ""
+    grp = m.group(1) if (m := re.match(r"^([A-Za-z]+)-\d+$", ind)) else ""
+    return [{"sample": sid, "individual": ind, "group": grp, "condition": meta.get("condition") or "",
+             "gate": g["gate"], "gate_name": g["gate"].split("/")[-1], "parent": (g.get("parent") or "").split("/")[-1], "model": g["model"],
+             "confidence": g["confidence"] if g["confidence"] is not None else "",
+             "low_confidence": bool(g["low_confidence"]), "count": g["count"], "pct_parent": g["percent_of_parent"],
+             "flowjo_pct": g.get("flowjo_pct", ""), "f1": g.get("f1", "")} for g in body["gates"]]
 
 
 # ---- review: edits, keeps, retraining -------------------------------------------------------------

@@ -12,7 +12,7 @@ from dataclasses import asdict
 import numpy as np
 
 from flow_er.workspace import store, toolkit
-from flow_er.workspace.data import Dataset, Gate, in_polygon, open_dataset, short_label
+from flow_er.workspace.data import SCATTER, Dataset, Gate, in_polygon, open_dataset, short_label
 
 MAX_POINTS = 6000  # sent to the browser per plot
 
@@ -81,6 +81,28 @@ def tree(exp_id: str, sid: str) -> list[dict]:
     return out
 
 
+SUP = str.maketrans("0123456789-", "⁰¹²³⁴⁵⁶⁷⁸⁹⁻")
+
+
+def axis_ticks(ds: Dataset, sid: str, pnn: str) -> list[dict]:
+    """Where round channel values fall on a plot axis (display units), labelled as FlowJo labels them:
+    0, 50K, 100K... on scatter and time, decades 10², 10³... on fluorescence."""
+    t = ds._transforms(sid).get(pnn)
+    s = ds._sample(sid)
+    n = list(s.pnn_labels).index(pnn) + 1
+    top = float(s.metadata.get(f"p{n}r") or 262144)
+    if SCATTER.match(pnn) or pnn.lower() == "time":
+        mag = 10 ** max(0, len(str(int(top))) - 2)
+        step = next((k * mag for k in (1, 2, 2.5, 5, 10) if top / (k * mag) <= 6), top)
+        raw = [i * step for i in range(int(top // step) + 1)]
+        label = lambda v: "0" if v == 0 else f"{v / 1000:g}K" if v >= 1000 else f"{v:g}"
+    else:
+        raw = [0.0] + [10.0 ** k for k in range(2, 8) if 10 ** k <= top]
+        label = lambda v: "0" if v == 0 else "10" + str(int(np.log10(v))).translate(SUP)
+    disp = t.apply(np.asarray(raw, dtype=float)) if t is not None else np.asarray(raw, dtype=float)
+    return [{"v": round(float(d), 4), "label": label(v)} for v, d in zip(raw, np.ravel(disp)) if -0.01 <= d <= 1.01]
+
+
 def plot(exp_id: str, sid: str, x: str, y: str, parent: str | None, stage: str = "processed") -> dict:
     """Events of one population on two channels, with which child gate each falls in."""
     ds = dataset(exp_id)
@@ -107,6 +129,8 @@ def plot(exp_id: str, sid: str, x: str, y: str, parent: str | None, stage: str =
         "n_parent": int(membership(exp_id, sid, parent, by_key).sum()),
         "n_shown": int(min(len(pts), MAX_POINTS)),
         "stage": stage,
+        "x_ticks": axis_ticks(ds, sid, x),
+        "y_ticks": axis_ticks(ds, sid, y),
     }
 
 
@@ -182,13 +206,18 @@ def stats(exp_id: str, gate_keys: list[str] | None, channels: list[str] | None =
 def population_table(exp_id: str, samples: list[str] | None = None) -> list[dict]:
     """Every gate in every sample: the table the agent quotes and the views are drawn from. With
     `samples`, only those files are counted and their rows replace theirs in the saved table."""
+    from flow_er.workspace import samplemeta
     ds = dataset(exp_id)
+    # who each file came from, beside its numbers, so a figure can group by animal, organ or condition
+    who = {r["sample"]: r for r in samplemeta.get(exp_id)}
     rows = [r for r in read_table(exp_id, "population_stats") if r["sample"] not in samples] if samples else []
     for sid in samples or ds.sample_ids:
+        w = who.get(sid, {})
         for t in tree(exp_id, sid):
             if t["draft"]:
                 continue
-            rows.append({"sample": sid, "gate": t["name"], "gate_path": t["key"], "parent": t["parent"] or "",
+            rows.append({"sample": sid, "individual": w.get("individual") or "", "organ": w.get("organ") or "",
+                         "condition": w.get("condition") or "", "gate": t["name"], "gate_path": t["key"], "parent": t["parent"] or "",
                          "source": t["source"], "count": t["count"], "pct_parent": t["pct_parent"],
                          "pct_total": t["pct_total"]})
     save_table(exp_id, "population_stats", rows)

@@ -16,8 +16,8 @@ import {
 } from "../../api/hooks";
 import { DensityImage } from "../../components/plots/DensityImage";
 import { Flower, Icon } from "../../components/icons";
-import { clamp, fmt, ui, useUi } from "../../lib";
-import { askInChat } from "../agent/Chat";
+import { clamp, fmt, gateLabel, ui, useUi } from "../../lib";
+import { askInChat, sendInChat } from "../agent/Chat";
 
 const COLS = ["source", "macro", "model", "measure", "view"] as const;
 const COL_NAME: Record<string, string> = { source: "Raw data", macro: "Clean up", model: "Learned models", measure: "Measure", view: "Results" };
@@ -45,8 +45,8 @@ function StepCard({ id, data: d }: NodeProps<RFNode<Card>>) {
   const st = d.run?.status;
   // the stage goes in as k-<stage>: React Flow takes any element classed "source" or "target" for a port
   return (
-    <div className={`node ${d.status} k-${d.kind}${st ? ` ran-${st}` : ""}${st === "running" ? " running" : ""}${d.build != null ? " build" : ""}${d.selected ? " sel" : ""}`}
-      style={{ width: NW, ["--k" as string]: KIND_COL[d.kind] ?? KIND_COL.source, ["--i" as string]: d.build ?? 0 }}>
+    <div title={d.title} className={`node ${d.status} k-${d.kind}${st ? ` ran-${st}` : ""}${st === "running" ? " running" : ""}${d.build != null ? " build" : ""}${d.selected ? " sel" : ""}`}
+      style={{ width: (d.w as number | undefined) ?? NW, ["--k" as string]: KIND_COL[d.kind] ?? KIND_COL.source, ["--i" as string]: d.build ?? 0 }}>
       {d.inputs.length > 0 && <Handle type="target" position={d.down ? Position.Top : Position.Left} className="port in" isConnectable={false} />}
       {d.outputs.length > 0 && <Handle type="source" position={d.down ? Position.Bottom : Position.Right} className="port out" isConnectable={false} />}
       <span className="nic"><I /></span>
@@ -76,7 +76,16 @@ function Canvas({ s }: { s: ExperimentState }) {
   const [showRuns, setShowRuns] = useState(false);
   const [viewRun, setViewRun] = useState<Execution | null>(null);
   const wrap = useRef<HTMLDivElement>(null);
+  const outer = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
+  const [outerW, setOuterW] = useState(800);
+  useEffect(() => {
+    const el = outer.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setOuterW(el.clientWidth));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   useEffect(() => {
     const el = wrap.current;
     if (!el) return;
@@ -84,7 +93,8 @@ function Canvas({ s }: { s: ExperimentState }) {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  const down = size.w < NARROW;
+  // the layout follows the whole panel's width, so opening a step's details never flips it
+  const down = outerW < NARROW;
   const lastRun = useMemo(() => Object.fromEntries(s.runs.map((r) => [r.step, r])), [s.runs]);
   // in a draft, only the steps it adds or changes are drafts; the rest are the kept steps as they were
   const kept = useMemo(() => Object.fromEntries(s.plan.map((k) => [k.id, k])), [s.plan]);
@@ -102,18 +112,27 @@ function Canvas({ s }: { s: ExperimentState }) {
     // card saying how to get one; figures are not plan steps, so nothing else would put them here
     const draftView = s.draft?.kind === "view" ? (s.draft.payload as ViewSpec) : null;
     const figs = [...s.views.filter((v) => v.id !== draftView?.id), ...(draftView ? [draftView] : [])];
-    const figCards: Card[] = figs.map((v, i) => ({
-      id: `fig:${v.id}`, kind: "view", title: v.title, sub: `Figure ${i + 1} · ${v.type === "table" ? "table" : `${v.type} chart`}`,
+    const what = (v: ViewSpec, i: number) => `Figure ${i + 1} · ${v.type === "table" ? "table" : `${v.type} chart`}`;
+    // a figure step that drew its figure stands for it: one card, dashed while the figure waits for Keep
+    const drawnBy = new Map<string, number>();
+    for (const c of stepCards) {
+      if (c.step?.op !== "view") continue;
+      const i = figs.findIndex((v) => v.title === (c.step!.params?.title ?? c.title) || v.title === c.title);
+      if (i < 0) continue;
+      drawnBy.set(figs[i].id, i);
+      c.sub = what(figs[i], i);
+      if (figs[i] === draftView) c.status = "draft";
+    }
+    const figCards: Card[] = figs.flatMap((v, i) => drawnBy.has(v.id) ? [] : [{
+      id: `fig:${v.id}`, kind: "view", title: v.title, sub: what(v, i),
       status: v === draftView ? "draft" : "done", outputs: [], inputs: [v.table], fig: true,
-    }));
-    if (!figCards.length && steps.length && !building)
+    }]);
+    if (!figs.length && !stepCards.some((c) => c.step?.op === "view") && steps.length && !building)
       figCards.push({ id: "fig:none", kind: "view", title: "No figures yet", sub: "Ask for a figure or a write-up in the chat", status: "planned", outputs: [], inputs: [], fig: true });
     return src.concat(stepCards, figCards);
   }, [s, steps, draftPlan, building, lastRun, kept]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const pos = useMemo(() => {
-    const rows: Record<number, number> = {};
-    const out: Record<string, [number, number]> = {};
+  const { pos, widths } = useMemo(() => {
     const lane: Record<string, number> = {};
     for (const n of cards) {
       // a stage per lane; a script sits with the latest stage it reads from (one reading the counts,
@@ -126,10 +145,24 @@ function Canvas({ s }: { s: ExperimentState }) {
         }
       }
       lane[n.id] = c;
-      const r = (rows[c] = (rows[c] ?? -1) + 1);
-      out[n.id] = down ? [30 + r * (NW + GAPD), 40 + c * ROWD] : [30 + c * COLW, 40 + r * ROWH];
     }
-    return out;
+    const out: Record<string, [number, number]> = {}, w: Record<string, number> = {};
+    const byLane: Record<number, Card[]> = {};
+    for (const n of cards) (byLane[lane[n.id]] ??= []).push(n);
+    if (down) {
+      // stacked: each card about as wide as its title needs (within bounds), each row centred on the
+      // panel's middle; rows need not line up at the edges
+      const fit = (n: Card) => Math.round(Math.max(160, Math.min(236, 92 + n.title.length * 4.6)));
+      const rowW = (row: Card[]) => row.reduce((t, n) => t + fit(n), 0) + (row.length - 1) * GAPD;
+      const widest = Math.max(NW, ...Object.values(byLane).map(rowW));
+      for (const [c, row] of Object.entries(byLane)) {
+        let x = 30 + (widest - rowW(row)) / 2;
+        for (const n of row) { out[n.id] = [x, 40 + Number(c) * ROWD]; w[n.id] = fit(n); x += fit(n) + GAPD; }
+      }
+    } else {
+      for (const [c, row] of Object.entries(byLane)) row.forEach((n, r) => { out[n.id] = [30 + Number(c) * COLW, 40 + r * ROWH]; w[n.id] = NW; });
+    }
+    return { pos: out, widths: w };
   }, [cards, down]);
 
   // the order a draft's new steps appear in: by column, then row; kept for as long as they are shown
@@ -142,7 +175,7 @@ function Canvas({ s }: { s: ExperimentState }) {
   const nodes: RFNode<Card>[] = cards.map((n) => ({
     id: n.id, type: "step", position: { x: pos[n.id][0], y: pos[n.id][1] }, draggable: false,
     sourcePosition: down ? Position.Bottom : Position.Right, targetPosition: down ? Position.Top : Position.Left,
-    data: { ...n, run: shownRun?.[n.id], build: built.current.get(n.id), selected: sel === n.id, down },
+    data: { ...n, run: shownRun?.[n.id], build: built.current.get(n.id), selected: sel === n.id, down, w: widths[n.id] },
   }));
   const edges: RFEdge[] = [];
   for (const n of cards) for (const inp of n.inputs) {
@@ -157,18 +190,34 @@ function Canvas({ s }: { s: ExperimentState }) {
 
   // fit when the steps or the canvas change: the whole graph if it fits at a readable size, otherwise
   // a readable size that keeps the start in view (or, while the agent builds it, the newest step)
-  const layoutKey = cards.map((n) => `${n.kind}:${n.id}`).join("|");
+  const layoutKey = cards.map((n) => `${n.kind}:${n.id}:${Math.round(widths[n.id] ?? 0)}`).join("|");
   useEffect(() => {
     const { w, h } = size;
-    const ps = Object.values(pos);
-    const maxX = Math.max(...ps.map((p) => p[0])) + NW + 30, maxY = Math.max(...ps.map((p) => p[1])) + 72 + 20;
-    const top = 58, bottom = 56;
+    const ids = Object.keys(pos);
+    const maxX = Math.max(...ids.map((id) => pos[id][0] + (widths[id] ?? NW))) + 30, maxY = Math.max(...ids.map((id) => pos[id][1])) + 72 + 20;
+    const top = 58, bottom = down ? 20 : 56;
     const k = clamp(Math.min((w - 24) / maxX, (h - top - bottom) / maxY), 0.62, 1);
     const fitsX = maxX * k <= w - 24, fitsY = maxY * k <= h - top - bottom;
-    const x = fitsX ? (w - maxX * k) / 2 : building && !down ? w - 12 - maxX * k : 0;
-    const y = fitsY || !building || !down ? top : h - bottom - maxY * k;
+    // centred on the panel's middle when it fits; while the agent builds, follow the newest step
+    let x = fitsX || down ? (w - maxX * k) / 2 : building ? w - 12 - maxX * k : 0;
+    let y = fitsY || !building || !down ? top : h - bottom - maxY * k;
     rf.setViewport({ x, y, zoom: k }, { duration: 450 });
-  }, [layoutKey, size.w, size.h]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [layoutKey, size.w, size.h, down]); // eslint-disable-line react-hooks/exhaustive-deps
+  // a step's details float over the right of the canvas: slide the canvas so the step you clicked stays clear of them
+  useEffect(() => {
+    if (!sel || !pos[sel]) return;
+    const t = window.setTimeout(() => {
+      const panel = outer.current?.querySelector(".node-panel")?.getBoundingClientRect();
+      const box = wrap.current?.getBoundingClientRect();
+      if (!panel || !box) return;
+      const vp = rf.getViewport();
+      const left = box.left + vp.x + pos[sel][0] * vp.zoom, right = left + (widths[sel] ?? NW) * vp.zoom;
+      const room = panel.left - 16;
+      if (right > room) rf.setViewport({ ...vp, x: vp.x - (right - room) - 8 }, { duration: 300 });
+      else if (left < box.left + 8) rf.setViewport({ ...vp, x: vp.x + (box.left + 8 - left) }, { duration: 300 });
+    }, 60);
+    return () => window.clearTimeout(t);
+  }, [sel]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const runAll = async (mode = "all", node?: string) => {
     setViewRun(null);
@@ -189,13 +238,14 @@ function Canvas({ s }: { s: ExperimentState }) {
           <h2>No analysis planned yet</h2>
           <p>Tell me in the chat what the experiment is for. I will lay the analysis out here as steps: arithmetic as macros, judgement calls as models, then the measurements and the figures.</p>
         </div>
-        <button className="btn ink big-btn" onClick={() => askInChat("Plan the analysis")}>Plan the analysis</button>
+        <button className="btn ink big-btn" onClick={() => sendInChat("Plan the analysis")}>Plan the analysis</button>
       </div>
     );
   }
 
   const selCard = cards.find((n) => n.id === sel);
   return (
+    <div className={`flow-split${down ? " down" : ""}`} ref={outer}>
     <div className={`flow-wrap flow-rf${showRuns || selCard?.step ? " side" : ""}`} ref={wrap}>
       <ReactFlow nodes={nodes} edges={edges} nodeTypes={NODE_TYPES} minZoom={0.3} maxZoom={1.6} proOptions={{ hideAttribution: true }}
         nodesConnectable={false} nodesDraggable={false} zoomOnScroll={false} panOnScroll zoomActivationKeyCode="Meta"
@@ -215,9 +265,10 @@ function Canvas({ s }: { s: ExperimentState }) {
             {running ? <Flower className="sm" /> : <Icon.play />}{running ? `Running ${doneCount} of ${Object.keys(live!.nodes).length}` : "Run workflow"}
           </button>
           <button className={`btn sm${showRuns ? " on" : ""}`} id="flow-runs" onClick={() => setShowRuns(!showRuns)}>Runs{history.length ? ` · ${history.length}` : ""}</button>
-          <label className="flow-switch" title="Run the workflow on its own when new FCS files arrive in the data folder">
-            <input type="checkbox" id="flow-active" checked={!!s.active} onChange={toggleActive} /><span>On new files</span>
-          </label>
+          <button className={`flow-switch${s.active ? " on" : ""}`} id="flow-active" role="switch" aria-checked={!!s.active} onClick={toggleActive}
+            title="Run the workflow on its own when new FCS files arrive in the data folder">
+            <i className="sw" aria-hidden="true" /><span>{s.active ? "Runs on new files" : "Run on new files"}</span>
+          </button>
           <button className="btn sm" onClick={() => askInChat("Add a step that ")}>+ Add a step</button>
         </Panel>
       </ReactFlow>
@@ -239,6 +290,7 @@ function Canvas({ s }: { s: ExperimentState }) {
           </div>
         </aside>
       )}
+    </div>
       {selCard?.step && <NodePanel s={s} card={selCard} draft={!!draftPlan || building} onClose={() => setSel(null)} onRun={runAll} run={shownRun?.[selCard.id]} />}
     </div>
   );
@@ -375,15 +427,15 @@ function AutogatePanel({ s }: { s: ExperimentState }) {
       {isFetching && !res && <p className="np-status"><Flower className="sm" /> Gating {sample && short(sample)}…</p>}
       {!!gates.length && (
         <div className="n-tblwrap np-tbl"><table className="n-tbl ag-tbl">
-          <thead><tr><th>Gate</th><th>Model</th><th>Sure</th><th>%</th><th>FlowJo %</th><th>F1</th></tr></thead>
+          {/* five narrow columns, so the panel shows them all: the model's % beside FlowJo's, and a dot for "review this" */}
+          <thead><tr><th>Gate</th><th>By</th><th title="How sure the model is (0 to 1); a dot means review this gate">Sure</th><th title="% of parent: the model's, then FlowJo's">% · FlowJo</th><th title="Overlap with FlowJo's gate, cell by cell (1 is identical)">F1</th></tr></thead>
           <tbody>{gates.map((g) => (
             <tr key={g.gate} className={g.low_confidence ? "ag-unsure" : ""}>
-              <td title={g.gate}>{g.gate.split("/").pop()}</td>
-              <td>{g.model.includes("/unito/") ? "U-Net" : g.model === "template_copy" ? "Template" : g.model}</td>
-              <td>{g.confidence == null ? "—" : <>{g.confidence.toFixed(2)}{g.low_confidence && <span className="ag-flag" title="Review this gate">review</span>}</>}</td>
-              <td>{g.percent_of_parent.toFixed(2)}</td>
-              <td>{g.flowjo_pct == null ? "—" : g.flowjo_pct.toFixed(2)}</td>
-              <td>{g.f1 == null ? "—" : g.f1.toFixed(3)}</td>
+              <td title={g.gate}>{gateLabel(g.gate.split("/").pop() ?? "")}</td>
+              <td title={g.model}>{g.model.includes("/unito/") ? "U-Net" : g.model === "template_copy" ? "Copy" : g.model}</td>
+              <td>{g.confidence == null ? "—" : g.confidence.toFixed(2)}{g.low_confidence && <i className="ag-dot" title="Review this gate" aria-label="review" />}</td>
+              <td>{g.percent_of_parent.toFixed(2)}<span className="ag-fj"> · {g.flowjo_pct == null ? "—" : g.flowjo_pct.toFixed(2)}</span></td>
+              <td>{g.f1 == null ? "—" : g.f1.toFixed(2)}</td>
             </tr>
           ))}</tbody>
         </table>
@@ -391,16 +443,25 @@ function AutogatePanel({ s }: { s: ExperimentState }) {
       )}
       <div className="ag-actions">
         <button className="btn sm ink" id="ag-review" onClick={review} disabled={!gates.length}>Review in the data lab</button>
+        <button className="btn sm" id="ag-watch" onClick={() => { ui.lab({ live: true, view: "plot", compare: false }); ui.open("lab"); }}
+          title="Watch the models gate each file, gate by gate, in the data lab">Watch the models</button>
         {files?.lab && <button className="btn sm" id="ag-teach" onClick={teach} disabled={!gates.length} title="Keep these gates as training examples for the lab's next version">Teach the models</button>}
       </div>
       {!!lab?.versions.length && (
         <div className="ag-models"><b className="small">Models for lab {lab.lab}</b>
           {lab.taught && <p className="small muted" id="ag-taught">Taught so far: {lab.taught.samples} {lab.taught.samples === 1 ? "file" : "files"} from {lab.taught.individuals.length} {lab.taught.individuals.length === 1 ? "donor" : "donors"}{lab.taught.individuals.length ? ` (${lab.taught.individuals.join(", ")})` : ""}</p>}
           {lab.taught && <button className="btn sm" id="ag-retrain" onClick={retrain} disabled={job?.status === "running" || lab.taught.individuals.length < 2}
-            title={lab.taught.individuals.length < 2 ? "Teach a file from at least two donors first" : "Train new models on the kept gates; a version is used only if it is better"}>
+            title="Train new models on the kept gates; a version is used only if it is better">
             {job?.status === "running" ? <><Flower className="sm" /> Retraining…</> : "Retrain on the kept gates"}</button>}
+          {/* why the button is off, said plainly rather than only on hover */}
+          {lab.taught && lab.taught.individuals.length < 2 && !job && (
+            <p className="small muted" id="ag-why">Retraining compares on a donor it did not learn from, so it needs kept gates from 2 donors; {lab.taught.individuals.length ? "1 so far. Teach a file from another donor." : "none yet. Review a file, then Teach the models."}</p>
+          )}
           {job && <p className="small muted" id="ag-job">{job.status === "running" ? job.lines.at(-1) ?? "starting" : job.status === "done" ? job.summary?.reason : job.error}</p>}
-          <ul>{lab.versions.map((v) => <li key={v.version} className={v.current ? "on" : ""}><span>{v.version}</span>{v.current && <span className="pill">current</span>}<small>{v.notes}</small></li>)}</ul>
+          <details className="ag-versions">
+            <summary>Versions ({lab.versions.length}){lab.versions.find((v) => v.current) ? ` · ${lab.versions.find((v) => v.current)!.version} in use` : ""}</summary>
+            <ul>{lab.versions.map((v) => <li key={v.version} className={v.current ? "on" : ""}><span>{v.version}</span>{v.current && <span className="pill">current</span>}<small>{v.notes}</small></li>)}</ul>
+          </details>
         </div>
       )}
     </div>
@@ -432,7 +493,7 @@ function NodePanel({ s, card, draft, onClose, onRun, run }: { s: ExperimentState
       <div className="insp-h"><span className="np-t"><b>{card.title}</b><small>{type?.name ?? step.op}</small></span><button className="ib sm" aria-label="Close" onClick={onClose}><Icon.close /></button></div>
       <div className="np-tabs" role="tablist">
         {(step.script ? (["input", "code", "output"] as const) : (["input", "settings", "output"] as const)).map((t) => (
-          <button key={t} role="tab" aria-selected={tab === t} className="np-tab" onClick={() => setTab(t)}>{{ input: "Input", settings: "Settings", code: "Code", output: "Output" }[t]}</button>
+          <button key={t} role="tab" aria-selected={tab === t} className="np-tab" id={`np-tab-${t}`} onClick={() => setTab(t)}>{{ input: "Input", settings: "Settings", code: "Code", output: "Output" }[t]}</button>
         ))}
       </div>
       <div className="insp-b">
@@ -479,9 +540,8 @@ function NodePanel({ s, card, draft, onClose, onRun, run }: { s: ExperimentState
       </div>
       {!draft && (
         <div className="np-run">
-          <button className="btn sm ink" onClick={() => onRun("only", step.id)}><Icon.play />Run this step</button>
-          <button className="btn sm" onClick={() => onRun("to", step.id)}>Run to here</button>
-          <button className="btn sm" onClick={() => onRun("from", step.id)}>Run from here</button>
+          {/* one button: the step, and anything before it that changed (unchanged steps are reused) */}
+          <button className="btn sm ink" onClick={() => onRun("to", step.id)} title="Runs this step, and any step before it that changed; unchanged steps are reused"><Icon.play />Run this step</button>
         </div>
       )}
     </aside>

@@ -9,7 +9,7 @@ import { useReport, type BoundNumber, type Segment } from "../../api/report";
 import { Tip, useTip, ViewChart } from "../../components/plots";
 import { clearSelection, useSelectionLabel } from "../../components/plots/selection";
 import { esc, fmt, ui } from "../../lib";
-import { askInChat } from "../agent/Chat";
+import { askInChat, sendInChat } from "../agent/Chat";
 import { GatingStrategy } from "./GatingStrategy";
 import "../../styles/report.css";
 
@@ -39,6 +39,14 @@ const csv = (rows: Record<string, unknown>[]) => {
 function Figure({ v, n, onDecide }: { v: View; n: number; onDecide: (keep: boolean) => void }) {
   const [wide, setWide] = useState(false);
   const [rowsOpen, setRowsOpen] = useState(false);
+  const [more, setMore] = useState(false);
+  // the menu closes on a click anywhere else, or Escape
+  useEffect(() => {
+    if (!more) return;
+    const close = (e: Event) => { if (e instanceof KeyboardEvent ? e.key === "Escape" : !(e.target as Element).closest?.(".rp-more")) setMore(false); };
+    window.addEventListener("pointerdown", close); window.addEventListener("keydown", close);
+    return () => { window.removeEventListener("pointerdown", close); window.removeEventListener("keydown", close); };
+  }, [more]);
   const copy = async () => {
     try { await navigator.clipboard.writeText(csv(v.rows)); ui.toast(`Copied ${v.rows.length} rows as CSV`); }
     catch { ui.toast("Could not reach the clipboard"); }
@@ -50,11 +58,19 @@ function Figure({ v, n, onDecide }: { v: View; n: number; onDecide: (keep: boole
         {v.draft
           ? <span className="row-btns"><button className="btn sm ink" onClick={() => onDecide(true)}>Keep</button><button className="btn sm plain" onClick={() => onDecide(false)}>Undo</button></span>
           : <span className="rp-acts">
-              <button onClick={() => setWide(!wide)}>{wide ? "Narrow" : "Expand"}</button>
-              <button onClick={() => setRowsOpen(!rowsOpen)} aria-expanded={rowsOpen}>Data</button>
-              <button onClick={copy}>Copy CSV</button>
+              {/* the two things most often wanted stay in view; the rest wait under ⋯ */}
               <button onClick={() => { ui.lab({ view: "saved", fig: v.spec.id }); ui.open("lab"); }} title="Open this figure in the data lab's Saved diagrams, where the lab assistant can explain it">Open in lab</button>
               <button onClick={() => askInChat(`About Figure ${n} (${v.spec.title}): `)}>Ask</button>
+              <span className="rp-more">
+                <button aria-haspopup="menu" aria-expanded={more} aria-label="More for this figure" onClick={() => setMore(!more)}>⋯</button>
+                {more && (
+                  <span className="rp-menu" role="menu">
+                    <button role="menuitem" onClick={() => { setWide(!wide); setMore(false); }}>{wide ? "Narrow" : "Expand"}</button>
+                    <button role="menuitem" onClick={() => { setRowsOpen(!rowsOpen); setMore(false); }}>{rowsOpen ? "Hide the data" : "Show the data"}</button>
+                    <button role="menuitem" onClick={() => { copy(); setMore(false); }}>Copy as CSV</button>
+                  </span>
+                )}
+              </span>
             </span>}
       </div>
       <ViewChart view={v} />
@@ -130,7 +146,7 @@ export function Report({ s }: { s: ExperimentState }) {
               <span className="row-btns"><button className="btn sm ink" onClick={() => decide(true)}>Keep</button><button className="btn sm plain" onClick={() => decide(false)}>Undo</button></span></div>
           )}
           <span className="kick">Results</span>
-          <h1>{rep.title || "No findings written yet"}</h1>
+          <h1>{rep.title || "Results"}</h1>
           <span className="byline">{s.title} · {s.snapshot.samples.length} files · numbers from saved tables</span>
         </header>
 
@@ -149,7 +165,7 @@ export function Report({ s }: { s: ExperimentState }) {
             : <div className="empty-in"><p>{measured
                 ? "The agent writes the title and summary from the kept tables. Every number in them points at a table cell."
                 : "Nothing is measured yet. Run the plan's measure step, then ask for the summary."}</p>
-                <button className="btn sm" onClick={() => askInChat(measured ? "Write the results summary" : "Run the plan")}>{measured ? "Write the summary" : "Run the plan"}</button></div>}
+                <button className="btn sm" onClick={() => sendInChat(measured ? "Write the results summary" : "Run the plan")}>{measured ? "Write the summary" : "Run the plan"}</button></div>}
         </section>
 
         <section id="rp-figures">
@@ -160,8 +176,8 @@ export function Report({ s }: { s: ExperimentState }) {
           {views.length
             ? views.map((v, i) => <Figure key={v.spec.id + (v.draft ? "-d" : "")} v={v} n={i + 1} onDecide={decide} />)
             : <div className="empty-in"><p>No figures yet. Say what you want to compare, and the agent draws it from a saved table.</p>
-                <button className="btn sm" onClick={() => askInChat("Draw ")}>Ask for a figure</button></div>}
-          {!!views.length && <button className="btn sm plain ask-more" onClick={() => askInChat("Draw ")}>Ask for another figure</button>}
+                <button className="btn sm" onClick={() => sendInChat("Draw a figure that answers the experiment's question")}>Ask for a figure</button></div>}
+          {!!views.length && <button className="btn sm plain ask-more" onClick={() => sendInChat("Draw another figure for the question, one that shows something the kept figures do not")}>Ask for another figure</button>}
         </section>
 
         <section id="rp-methods">
