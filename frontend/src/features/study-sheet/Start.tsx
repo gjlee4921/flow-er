@@ -54,6 +54,70 @@ function LabCard({ lab }: { lab: string }) {
   );
 }
 
+/** The lab's gating models, one card at a time when there are several: swipe (trackpad, touch, or
+ *  drag with the mouse), the arrows, the dots or ← → to browse them. One lab is a plain card. */
+function LabBrowser({ labs, children }: { labs: string[]; children?: React.ReactNode }) {
+  const track = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ x: number; left: number; moved: boolean } | null>(null);
+  const [at, setAt] = useState(0);
+  const many = labs.length > 1;
+  const go = (i: number) => {
+    const el = track.current;
+    if (!el) return;
+    const k = Math.max(0, Math.min(labs.length - 1, i));
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    el.scrollTo({ left: k * el.clientWidth, behavior: still ? "auto" : "smooth" });
+  };
+  // a mouse drag moves the cards with the pointer, then settles on the nearest (or the next, past 15%)
+  const release = (e: React.PointerEvent) => {
+    const d = drag.current, el = track.current;
+    drag.current = null;
+    if (!d?.moved || !el) return;
+    const from = Math.round(d.left / el.clientWidth), dx = e.clientX - d.x;
+    go(Math.abs(dx) > el.clientWidth * 0.15 ? from - Math.sign(dx) : from);
+    window.setTimeout(() => el.classList.remove("dragging"), 420);
+  };
+  return (
+    <>
+      <div className="st-h2row"><h2>Gating models</h2>
+        {many && (
+          <span className="ls-nav">
+            <span className="db-count">{at + 1} of {labs.length}</span>
+            <button className="ib sm" aria-label="Previous lab" disabled={at === 0} onClick={() => go(at - 1)}><Icon.back /></button>
+            <button className="ib sm" aria-label="Next lab" disabled={at === labs.length - 1} onClick={() => go(at + 1)}><Icon.caret /></button>
+          </span>
+        )}
+      </div>
+      <div ref={track} className={`db-labs${many ? " swipe" : ""}`}
+        {...(many ? { tabIndex: 0, role: "region", "aria-roledescription": "carousel", "aria-label": "The lab's gating models" } : {})}
+        onScroll={() => { const el = track.current; if (many && el) setAt(Math.round(el.scrollLeft / el.clientWidth)); }}
+        onKeyDown={(e) => {
+          if (!many || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
+          e.preventDefault(); go(at + (e.key === "ArrowRight" ? 1 : -1));
+        }}
+        onPointerDown={(e) => {
+          if (many && e.pointerType === "mouse" && e.button === 0) drag.current = { x: e.clientX, left: track.current!.scrollLeft, moved: false };
+        }}
+        onPointerMove={(e) => {
+          const d = drag.current, el = track.current;
+          if (!d || !el) return;
+          const dx = e.clientX - d.x;
+          if (!d.moved && Math.abs(dx) > 4) { d.moved = true; el.classList.add("dragging"); el.setPointerCapture(e.pointerId); }
+          if (d.moved) el.scrollLeft = d.left - dx;
+        }}
+        onPointerUp={release} onPointerCancel={release}>
+        {labs.map((l) => <LabCard key={l} lab={l} />)}
+        {children}
+      </div>
+      {many && (
+        <div className="ls-dots">
+          {labs.map((l, i) => <button key={l} aria-label={`Lab ${l}`} title={`Lab ${l}`} aria-current={i === at} onClick={() => go(i)} />)}
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function Start() {
   const qc = useQueryClient();
   const { data: datasets, isLoading } = useDatasets();
@@ -204,12 +268,10 @@ Choose this data; double-click to open it now`}>
           </div>
 
           <section className="st-sec">
-            <h2>Gating models</h2>
-            <div className="db-labs">
-              {labs.map((l) => <LabCard key={l} lab={l} />)}
+            <LabBrowser labs={labs}>
               {models && !labs.length && <p className="note">{models.message}</p>}
               {!models && <span className="thinking"><Flower /><span className="shimmer">Checking the models…</span></span>}
-            </div>
+            </LabBrowser>
             {health && <p className="db-sub db-agent"><Bloom p={1} className="xs" /> Agent: {health.llm_key === "loaded" ? `${health.model} ready` : "no key"}</p>}
           </section>
         </div>

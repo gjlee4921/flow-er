@@ -577,6 +577,21 @@ input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="r
 .db-dl dt { color: var(--text-3); }
 .db-dl dd { margin: 0; color: var(--text); }
 .db-agent { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 0; }
+/* several labs: one card at a time, swiped, with arrows and dots */
+.ls-nav { display: flex; align-items: center; gap: 2px; }
+.ls-nav .db-count { margin-right: 6px; font-variant-numeric: tabular-nums; }
+.ls-nav .ib:disabled { opacity: .3; pointer-events: none; }
+.ls-nav .ib:not(:disabled):hover { background: var(--sel); color: var(--fl-core); }
+.db-labs.swipe { display: flex; gap: 0; overflow-x: auto; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; scrollbar-width: none; border-radius: 18px; cursor: grab; }
+.db-labs.swipe::-webkit-scrollbar { display: none; }
+.db-labs.swipe > .db-lab { flex: 0 0 100%; scroll-snap-align: start; }
+.db-labs.swipe.dragging { scroll-snap-type: none; cursor: grabbing; user-select: none; }
+.db-labs.swipe:focus-visible { outline: 2px solid var(--sel-line); outline-offset: 3px; }
+.ls-dots { display: flex; justify-content: center; gap: 2px; margin-top: -2px; }
+.ls-dots button { width: 22px; height: 18px; padding: 0; border: 0; background: none; display: grid; place-items: center; cursor: pointer; }
+.ls-dots button::before { content: ""; width: 7px; height: 7px; border-radius: 4px; background: var(--sep-2); transition: width .2s, background .2s; }
+.ls-dots button:hover::before { background: var(--fl); }
+.ls-dots button[aria-current="true"]::before { width: 18px; background: var(--fl-core); }
 @media (max-width: 1000px) { .db-cols { grid-template-columns: minmax(0, 1fr); } }
 @media (prefers-reduced-motion: reduce) { .lab-orb::before, .lab-orb .fl { animation: none !important; } .lab-orb.live::before { opacity: .7; } }
 
@@ -630,6 +645,11 @@ input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="r
 .mr-add { all: unset; flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; color: var(--text-2); border: 1.5px dashed var(--sep-2); cursor: pointer; transition: background .15s, color .15s, border-color .15s; }
 .mr-add:hover, .mr-add:focus-visible { background: var(--hover); color: var(--fl-core); border-color: var(--sel-line); }
 .mr-add .i { width: 14px; height: 14px; }
+.mr-more { all: unset; box-sizing: border-box; flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 10.5px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -.02em; color: var(--text-2); background: var(--fill); cursor: pointer; transition: background .15s, color .15s, transform .15s; }
+.mr-more:hover, .mr-more:focus-visible, .mr-more[aria-expanded="true"] { background: var(--sel); color: var(--fl-core); transform: scale(1.1); outline: none; }
+.proj-menu.mr-pop { position: fixed; right: auto; z-index: 70; width: 300px; animation: in .14s var(--ease); }
+.mr-pop .pm-row { grid-template-columns: 8px minmax(0, 1fr) auto; }
+.mr-ago { font-size: 11px; color: var(--text-3); white-space: nowrap; }
 .mr-tip { position: fixed; z-index: 70; transform: translateY(-50%); pointer-events: none; display: grid; gap: 2px; min-width: 180px; max-width: 280px; padding: 9px 12px; border-radius: 12px;
   background: var(--pop); backdrop-filter: blur(20px) saturate(1.6); -webkit-backdrop-filter: blur(20px) saturate(1.6); box-shadow: var(--shadow-pop); font-size: 12px; color: var(--text-3); animation: in .14s var(--ease); }
 .mr-tip b { font-size: 13.5px; font-weight: 600; color: var(--text); }
