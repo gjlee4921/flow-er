@@ -213,13 +213,14 @@ def _live(exp_id: str, sid: str):
     return res
 
 
-_live: dict[str, dict] = {}
+# the models at work, per experiment (named apart from _live(), the gating results in memory)
+_progress: dict[str, dict] = {}
 
 
 def live(exp_id: str) -> dict:
     """The models at work, for watching: the files of the run, which is being gated now, which are done
     and which of those were gated just now (the rest were reused from an earlier run)."""
-    st = _live.get(exp_id)
+    st = _progress.get(exp_id)
     if st is None:
         # no run since the app started: the files gated so far, to watch again
         ids = labmod.dataset(exp_id).sample_ids
@@ -232,7 +233,7 @@ def table(exp_id: str, samples: list[str] | None = None) -> list[dict]:
     to live() as each file is gated, so the data lab can show the models working."""
     rows = []
     ids = list(samples or labmod.dataset(exp_id).sample_ids)
-    st = _live[exp_id] = {"running": True, "files": ids, "done": [], "fresh": [], "current": None, "started": store.now()}
+    st = _progress[exp_id] = {"running": True, "files": ids, "done": [], "fresh": [], "current": None, "started": store.now()}
     try:
         for sid in ids:
             st["current"] = sid

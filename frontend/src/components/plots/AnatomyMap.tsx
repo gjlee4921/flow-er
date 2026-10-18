@@ -15,6 +15,7 @@ const ORGANS: { id: string; name: string; at: [number, number]; names: RegExp }[
   { id: "thymus", name: "Thymus", at: [186, 182], names: /^thymus/ },
   { id: "lung", name: "Lung", at: [212, 156], names: /^lungs?$|^lung\b/ },
   { id: "heart", name: "Heart", at: [258, 178], names: /^heart/ },
+  { id: "aorta", name: "Aorta", at: [272, 154], names: /^(aorta|aortic)/ },
   { id: "blood", name: "Blood", at: [236, 206], names: /^(peripheral )?blood|^pbmc/ },
   { id: "liver", name: "Liver", at: [296, 210], names: /^liver/ },
   { id: "spleen", name: "Spleen", at: [348, 176], names: /^spleen/ },
@@ -26,7 +27,8 @@ const ORGANS: { id: string; name: string; at: [number, number]; names: RegExp }[
   { id: "tumour", name: "Tumour", at: [482, 166], names: /^(tumou?r|primary|flank)/ },
   { id: "skin", name: "Skin", at: [430, 118], names: /^skin|^ear skin/ },
 ];
-const BASELINE = /naive|control|ctrl|baseline|untreated|healthy|young|wild|^wt|pre/i;
+// the group others are compared against: untreated, healthy, wild type, or a standard (chow) diet
+const BASELINE = /naive|control|ctrl|baseline|untreated|healthy|young|wild|^wt|pre|chow|standard diet|normal diet|^cd\b/i;
 const place = (organ: string) => ORGANS.find((o) => o.names.test(organ.trim().toLowerCase()));
 const mean = (v: number[]) => v.reduce((a, b) => a + b, 0) / v.length;
 const sd = (v: number[]) => (v.length > 1 ? Math.sqrt(v.reduce((a, b) => a + (b - mean(v)) ** 2, 0) / (v.length - 1)) : 0);

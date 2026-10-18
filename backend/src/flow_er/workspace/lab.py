@@ -206,13 +206,18 @@ def stats(exp_id: str, gate_keys: list[str] | None, channels: list[str] | None =
 def population_table(exp_id: str, samples: list[str] | None = None) -> list[dict]:
     """Every gate in every sample: the table the agent quotes and the views are drawn from. With
     `samples`, only those files are counted and their rows replace theirs in the saved table."""
+    from flow_er.workspace import samplemeta
     ds = dataset(exp_id)
+    # who each file came from, beside its numbers, so a figure can group by animal, organ or condition
+    who = {r["sample"]: r for r in samplemeta.get(exp_id)}
     rows = [r for r in read_table(exp_id, "population_stats") if r["sample"] not in samples] if samples else []
     for sid in samples or ds.sample_ids:
+        w = who.get(sid, {})
         for t in tree(exp_id, sid):
             if t["draft"]:
                 continue
-            rows.append({"sample": sid, "gate": t["name"], "gate_path": t["key"], "parent": t["parent"] or "",
+            rows.append({"sample": sid, "individual": w.get("individual") or "", "organ": w.get("organ") or "",
+                         "condition": w.get("condition") or "", "gate": t["name"], "gate_path": t["key"], "parent": t["parent"] or "",
                          "source": t["source"], "count": t["count"], "pct_parent": t["pct_parent"],
                          "pct_total": t["pct_total"]})
     save_table(exp_id, "population_stats", rows)
