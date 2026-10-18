@@ -282,3 +282,91 @@ def test_json_mode_puts_the_word_json_in_the_input(monkeypatch):
     monkeypatch.setattr(settings, "llm_provider", "openai")
     client.respond("Write a script.", [{"role": "user", "content": '{"goal": "subtract background"}'}], json_mode=True)
     assert "json" in str(seen["input"]).lower()
+
+
+QC_SCRIPT = '''
+PROVENANCE = {"what": "Drop events in time bins whose event rate is far from the file's median rate (a clog or a bubble).",
+              "source": None, "version": None, "licence": None, "adapted": "written for this step"}
+INPUTS = {"events": "events"}
+OUTPUTS = {"clean": "events", "qc": "table"}
+PARAMS = {"bins": 100, "max_dev": 3.0}
+
+import numpy as np
+import pandas as pd
+
+
+def run(inputs, params):
+    clean, rows = {}, []
+    for name, ev in sorted(inputs["events"].items()):
+        t = ev["Time"].to_numpy()
+        edges = np.linspace(t.min(), t.max(), int(params["bins"]) + 1)
+        idx = np.clip(np.searchsorted(edges, t, side="right") - 1, 0, len(edges) - 2)
+        counts = np.bincount(idx, minlength=len(edges) - 1)
+        med = np.median(counts)
+        mad = np.median(np.abs(counts - med)) or 1.0
+        bad = np.abs(counts - med) > params["max_dev"] * 1.4826 * mad
+        keep = ~bad[idx]
+        clean[name] = ev[keep].reset_index(drop=True)
+        rows.append({"file": name, "events": int(len(ev)), "kept": int(keep.sum()), "dropped_bins": int(bad.sum())})
+    return {"clean": clean, "qc": pd.DataFrame(rows)}
+'''
+
+
+def _sandboxed() -> bool:
+    import shutil
+    return Path("/usr/bin/sandbox-exec").exists() or bool(shutil.which("bwrap"))
+
+
+@pytest.mark.skipif(not _sandboxed(), reason="no sandbox-exec or bubblewrap on this machine")
+def test_the_sandbox_refuses_the_network_home_files_other_programs_and_keys(tmp_path, monkeypatch):
+    """A script cannot open a socket, read a file in the home folder, write outside its folder, start
+    another program or see an API key; and one that runs too long is stopped."""
+    from flow_er.workspace import sandbox
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-a-real-key")
+    secret = Path(__file__).resolve().parents[1] / "pyproject.toml"  # any file under the home folder
+    tries = {
+        "socket": "import socket\n    socket.create_connection(('1.1.1.1', 80), timeout=3)",
+        "home": f"open({str(secret)!r}).read()",
+        "write": f"open({str(Path.home() / 'flower-sandbox-escape.txt')!r}, 'w').write('x')",
+        "exec": "import subprocess\n    subprocess.run(['/bin/ls', '/'])",
+    }
+    for name, body in tries.items():
+        r = sandbox.run(f"def run(inputs, params):\n    {body}\n    return {{}}\n", {}, tmp_path / name)
+        assert r["status"] == "failed" and "not permitted" in r["error"].lower(), (name, r)
+    assert not (Path.home() / "flower-sandbox-escape.txt").exists()
+    r = sandbox.run("import os, pandas as pd\ndef run(inputs, params):\n    return {'env': pd.DataFrame({'k': sorted(os.environ)})}\n", {}, tmp_path / "env")
+    assert r["status"] == "done" and "OPENAI_API_KEY" not in (tmp_path / "env" / "env.csv").read_text()
+    r = sandbox.run("def run(inputs, params):\n    while True:\n        pass\n", {}, tmp_path / "slow", limits={"seconds": 3})
+    assert r["status"] == "failed" and "longer than 3 s" in r["error"]
+
+
+def test_script_checks_refuse_copyleft_sources_and_imports_outside_the_environment():
+    from flow_er.workspace import scripts
+    assert scripts.check(QC_SCRIPT)["ok"]
+    gpl = QC_SCRIPT.replace('"source": None', '"source": "https://github.com/cytoflow/cytoflow"').replace('"licence": None', '"licence": "GPL-2.0"')
+    assert any("copyleft" in p for p in scripts.check(gpl)["problems"])
+    assert any("imports os" in p for p in scripts.check(QC_SCRIPT.replace("import numpy as np", "import os\nimport numpy as np"))["problems"])
+    assert any("open()" in p for p in scripts.check(QC_SCRIPT.replace("clean, rows = {}, []", "clean, rows = {}, []\n    open('x')"))["problems"])
+
+
+@needs_data
+@pytest.mark.skipif(not _sandboxed(), reason="no sandbox-exec or bubblewrap on this machine")
+def test_a_script_step_passes_its_fixture_then_runs_in_the_workflow(exp):
+    """The QC script gives the hand-worked answer on its fixture, twice; kept in the plan, the workflow
+    runs it in the sandbox on every file and saves its table; running again reuses it."""
+    from flow_er.workspace import executor, scripts
+    times = sorted([b + (k + 0.5) / 10 for b in range(10) for k in range(10)] + [5 + (k + 0.5) / 40 for k in range(30)])
+    fixture = {"inputs": {"events": {"f1": {"columns": ["Time", "CD3"], "rows": [[t, 1.0] for t in times]}}},
+               "params": {"bins": 10, "max_dev": 3.0},
+               "expected": {"qc": {"columns": ["file", "events", "kept", "dropped_bins"], "rows": [["f1", 130, 90, 1]]}}}
+    t = scripts.test(QC_SCRIPT, fixture)
+    assert t["passed"], t
+    steps = plan.validate([{"id": "qc", "op": "custom_macro", "title": "Time QC", "inputs": ["fcs"], "outputs": ["qc_clean", "qc_qc"],
+                            "script": {"code": QC_SCRIPT, "provenance": {}, "fixture": fixture, "test": t}}])
+    store.set_draft(exp, "plan", steps, "a QC step")
+    store.keep(exp)
+    first = executor.start(exp, wait=True)
+    assert first["nodes"]["qc"]["status"] == "done", first["nodes"]["qc"]
+    rows = lab.read_table(exp, "qc_qc")
+    assert len(rows) == len(lab.dataset(exp).sample_ids) and all(0 < r["kept"] <= r["events"] for r in rows)
+    assert executor.start(exp, wait=True)["nodes"]["qc"]["status"] == "cached"
