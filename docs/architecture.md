@@ -1,6 +1,6 @@
 # Architecture
 
-Full product description: the flow-er PRD (Confluence, "Reinvent the wheel" page). The agent's design: the flow-er agent tech spec (a child page of the PRD). App plan: [spec-plan.md](spec-plan.md). Models and runtime: [models.md](models.md).
+On Confluence, under "Reinvent the wheel": the flow-er PRD (the product), the flow-er tech spec (as built), flow-er results (the tests and the loop comparison), and the flow-er agent tech spec (the agent's design, a child page of the PRD). App plan: [spec-plan.md](spec-plan.md). Models and runtime: [models.md](models.md).
 
 - **backend/**: FastAPI app (`src/flow_er/main.py`) plus a separate worker process for training and inference.
   - `cytometry/`: FCS and FlowJo workspaces.
