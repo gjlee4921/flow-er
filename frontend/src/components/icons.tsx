@@ -106,8 +106,8 @@ export function OwnFlower({ name, className = "" }: { name: string; className?: 
 }
 
 /** Who is signed in, drawn as their own flower. */
-export function Me({ name }: { name: string }) {
-  return <span className="me-av" aria-hidden="true"><OwnFlower name={name} /></span>;
+export function Me({ name, square = false }: { name: string; square?: boolean }) {
+  return <span className={`me-av${square ? " sq" : ""}`} aria-hidden="true"><OwnFlower name={name} /></span>;
 }
 
 export function Mark({ small = false }: { small?: boolean }) {

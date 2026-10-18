@@ -1,11 +1,11 @@
-// The sidebar folded to a strip: your own flower (settings) on top, one circle per project, its flower
-// as far opened as the project has come (hover for its title and status, click to open it), and + for a
-// new analysis. On the start page it is all there is;
+// The sidebar folded to a strip: home (the flow-er mark) on top, one circle per project, its flower as
+// far opened as the project has come (hover for its title and status, click to open it), + for a new
+// analysis, and you at the bottom (your own flower: settings and what flow-er remembers). On the start page it is all there is;
 // inside a project it unfolds into the full navigator (Rail).
 import { useState } from "react";
 import type { Experiment } from "../../api";
 import { useExperiments } from "../../api/hooks";
-import { Bloom, Icon, Me } from "../../components/icons";
+import { Bloom, Icon, Mark, Me } from "../../components/icons";
 import { ago, ME, ui } from "../../lib";
 
 /** How far a project has come, as a flower opening: a bud before a plan, half open with a kept plan,
@@ -35,9 +35,8 @@ export default function MiniRail({ exp }: { exp: string | null }) {
 
   return (
     <aside className="mini-rail" id="ws-rail" aria-label="Projects">
-      <button className="mr-me" aria-label="Settings" title="Settings and what flow-er remembers" onClick={() => ui.set({ settingsOpen: true })}>
-        <Me name={ME.name} />
-      </button>
+      <button className="mr-home" aria-label="Home" title="Home: projects, datasets and the lab's models"
+        onClick={() => { setTip(null); if (exp) ui.openProject(null); }}><Mark /></button>
       {exp && (
         <button className="mr-ic" aria-label="Show the project's sidebar" title="Show the project's sidebar" onClick={() => ui.set({ railOpen: true })}><Icon.sidebar /></button>
       )}
@@ -55,6 +54,9 @@ export default function MiniRail({ exp }: { exp: string | null }) {
         <button className="mr-add" aria-label="New analysis" title="New analysis"
           onClick={() => { setTip(null); ui.openProject(null); ui.set({ dock: "open" }); }}><Icon.plus /></button>
       </nav>
+      <button className="mr-me" aria-label={`${ME.name}: settings`} title="You: settings and what flow-er remembers" onClick={() => ui.set({ settingsOpen: true })}>
+        <Me name={ME.name} square />
+      </button>
       {tip && (
         <div className="mr-tip" role="tooltip" style={{ top: tip.top, left: tip.left }}>
           <b>{tip.p.title}</b>

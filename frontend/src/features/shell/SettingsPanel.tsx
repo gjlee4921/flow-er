@@ -51,6 +51,7 @@ export default function SettingsPanel() {
           <h2 id="set-h">Settings</h2>
           <button className="ib sm" aria-label="Close" onClick={close}><Icon.close /></button>
         </header>
+        <div className="set-body">
         <div className="set-me"><Me name={ME.name} /><div><b>{ME.name}</b><span>flow-er on this machine · your flower is drawn from your name</span></div></div>
 
         <section className="set-sec">
@@ -93,6 +94,7 @@ export default function SettingsPanel() {
           </>}
         </section>
 
+        </div>
         <footer>
           <span>{cfg ? <>These come from <code>{cfg.env_file}</code>{cfg.env_file_exists ? "" : " (not created yet)"}; change them there and restart the backend.</> : ""}</span>
         </footer>
