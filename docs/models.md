@@ -5,7 +5,8 @@ training runs. Exact JSON shapes and the endpoint mapping are in
 [runtime-api.md](runtime-api.md); the model specification is [unito-spec.md](unito-spec.md);
 design choices are logged in [decisions.md](decisions.md).
 
-Status: 18 October 2026, branch `phase1-splits`.
+Status: 18 October 2026, `main`. Wiring it into the app (files outside git, set-up, calls):
+[handover.md](handover.md).
 
 ## 1. Models
 
@@ -13,10 +14,10 @@ Status: 18 October 2026, branch `phase1-splits`.
 | --- | --- | --- | --- | --- |
 | **Template copy** | The lab's template gate, unchanged | template polygon | none | Always available; the fallback for every gate |
 | **Classical baseline** | Template moved to the data: density-peak shift for scatter/lineage gates; cytokine threshold set from the donor's unstimulated well | template + parent events | none | Evaluation only (`ml/baseline.py`, `scripts/run_baselines.py`); not in the runtime |
-| **Per-gate UNITO** (spec §1) | One U-Net per gate: parent density image → gate mask | parent density | `models/als/unito/` (4 ALS gates, trained on CPU) · `models/als/unito_gpu/` (11 ALS gates, trained on Colab) | CPU models usable now; GPU weights still on Colab (recipes only here) |
-| **Shared U-Net, base** (spec §2) | One model for every gate, pretrained on the pool (spleen, macrophages, spectral): moves the template to fit this sample | parent density, template mask, unstimulated-well density (cytokine gates; zeros otherwise) | `models/pretrain/shared/shared` | Weights on Colab; becomes `models/base/shared` |
-| **Shared U-Net, ALS fine-tuned** | The base model fine-tuned on ALS training donors | same | `models/als/shared_finetuned/shared` | Weights on Colab |
-| Single-input variants (`_1ch`) and MO280 models | Comparison without the unstimulated well; the unseen-tissue test | | | Running on Colab |
+| **Per-gate UNITO** (spec §1) | One U-Net per gate: parent density image → gate mask | parent density | `models/als/unito_gpu/` (11 ALS gates, trained on Colab) · `models/als/unito/` (4 gates, CPU) | **In use**: lab `als` version v003 routes the 11 gates to the GPU models; v001 (the 4 CPU models) is kept for rollback |
+| **Shared U-Net, base** (spec §2) | One model for every gate, pretrained on the pool (spleen, macrophages, spectral): moves the template to fit this sample | parent density, template mask, unstimulated-well density (cytokine gates; zeros otherwise) | `models/base/shared` | Installed; being removed from the router (final decision below) |
+| **Shared U-Net, ALS fine-tuned** | The base model fine-tuned on ALS training donors | same | `models/als/shared_finetuned/shared` | Evaluation only |
+| Single-input variants (`_1ch`), low-lr fine-tune, MO280 models, CytoBERT | Comparisons and the unseen-tissue test | | | Done; evaluation only (results below) |
 
 All models share one image recipe (`ml/images.py`):
 - **Transform:** a fixed display transform: linear for scatter, logicle for fluorescence.
@@ -35,6 +36,27 @@ scatter gates, which the expert rarely redrew. Mean frequency error, percentage 
 | CD4+ | 2.31 | 16.18 | 3.13 | 3.35 | **2.25** |
 | IFNγ [CD4] | 0.88 | 0.64 | 0.34 | 1.36 | **0.17** |
 | IFNγ [CD8] | 1.00 | 2.09 | **0.15** | 0.90 | 0.27 |
+
+**Final decision (18 Oct): per-gate UNITO where the lab has a model for the gate, otherwise
+template copy.** The evidence:
+- **Shared U-Net:** over the 7 gates every method covers, the fine-tuned model is within noise of
+  UNITO on the test donors (0.89 vs 0.93 pp), but twice UNITO's error on the validation donors
+  (0.77 vs 0.37). On the 4 gates with no UNITO model it does not beat template copy (IL-10 [CD4]
+  0.14 vs 0.11, IL-17 [CD8] 0.10 vs 0.04).
+- **CytoBERT (phase 2)** was fine-tuned per gate as a per-cell classifier (7 marker tokens) and
+  stacked with UNITO by a 3-parameter combiner fitted on the validation donors. The result is
+  -0.014 pp vs UNITO on the cytokine gates (95% bootstrap CI -0.05 to +0.03 over donors). A
+  plain MLP on the same markers does as well, and on one CD8+ well the combination removed
+  4,032 true positives. Not used; it may matter on 20–40-marker panels.
+- **Choosing a method per gate on the 2 validation donors** made the test result worse (1.05 vs
+  0.93 pp): too few donors, from the other screen.
+- **MO280 unseen tissue** (train blood/spleen, test liver/aorta; 14 gates the expert changed
+  between tissues): template copy 7.3 pp, shared zero-shot 7.6, UNITO 11.4, classical 17.0. No
+  model transfers to a new tissue without that tissue's labels, so the correction-and-retrain
+  loop (§3) is what handles it.
+
+The router and `retrain()` below still include the shared model; they are being changed to match
+this decision without changing any function names or JSON shapes.
 
 ## 2. The runtime: an FCS file in, gates out
 

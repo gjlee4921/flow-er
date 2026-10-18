@@ -1,0 +1,1299 @@
+<title>Wheelwright</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+/* Layout: an instrument workbench. A control bar on top, one working surface per tab, an inspector on the right. */
+:root{
+  --bg:#F2F3F6; --surface:#FFFFFF; --surface-2:#EBEDF2; --plot:#FFFFFF;
+  --ink:#131720; --ink-2:#414959; --muted:#677083; --line:#D8DCE4; --line-2:#BFC6D2;
+  --accent:#4F3FD4; --accent-soft:#ECEAFD; --accent-ink:#FFFFFF;
+  --ok:#1D7748; --ok-soft:#E1F1E8; --check:#955700; --check-soft:#FBEED7;
+  --g0:#3567B0; --g1:#D9701A; --g2:#178F7C; --g3:#A8367A;
+  --font-display:"Bricolage Grotesque","IBM Plex Sans",system-ui,sans-serif;
+  --font-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0D1015; --surface:#151920; --surface-2:#1C212A; --plot:#0A0C10;
+    --ink:#E5E8EE; --ink-2:#B3BAC7; --muted:#8690A2; --line:#283039; --line-2:#3A4351;
+    --accent:#9D92FF; --accent-soft:#231E4A; --accent-ink:#110D2B;
+    --ok:#5AC48C; --ok-soft:#12291D; --check:#E8A93E; --check-soft:#30230B;
+    --g0:#6E9FE8; --g1:#F29A4B; --g2:#47C2AC; --g3:#E27DB6;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0D1015; --surface:#151920; --surface-2:#1C212A; --plot:#0A0C10;
+  --ink:#E5E8EE; --ink-2:#B3BAC7; --muted:#8690A2; --line:#283039; --line-2:#3A4351;
+  --accent:#9D92FF; --accent-soft:#231E4A; --accent-ink:#110D2B;
+  --ok:#5AC48C; --ok-soft:#12291D; --check:#E8A93E; --check-soft:#30230B;
+  --g0:#6E9FE8; --g1:#F29A4B; --g2:#47C2AC; --g3:#E27DB6;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{background:var(--bg)}
+body{color:var(--ink);font-family:var(--font-body);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+h1,h2,h3{margin:0;text-wrap:balance}
+h2{font-family:var(--font-display);font-weight:700;font-size:26px;letter-spacing:-.015em;line-height:1.15}
+h3{font-size:15px;font-weight:600}
+p{margin:0}
+sup{font-size:.72em;line-height:0}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.eyebrow{font-family:var(--font-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+.lede{color:var(--ink-2);max-width:68ch}
+.wrap{max-width:1480px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+
+/* top bar */
+.top{background:var(--surface);border-bottom:1px solid var(--line)}
+.top-in{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;padding-block:12px 6px}
+.brand{display:flex;align-items:center;gap:10px;margin-right:auto;min-width:0}
+.brand svg{flex:none;color:var(--accent)}
+.brand .name{font-family:var(--font-display);font-weight:700;font-size:21px;letter-spacing:-.01em}
+.brand .sub{color:var(--muted);font-size:12px}
+.switch{display:flex;gap:4px;background:var(--surface-2);padding:4px;border-radius:10px;flex-wrap:wrap}
+.switch button{border:0;background:transparent;border-radius:7px;padding:5px 12px;text-align:left;color:var(--ink-2);cursor:pointer;min-height:44px}
+.switch button[aria-checked="true"]{background:var(--surface);color:var(--ink);box-shadow:0 0 0 1px var(--line-2)}
+.switch b{display:block;font-weight:600;font-size:13px}
+.switch small{display:block;font-size:11px;color:var(--muted)}
+.sim{font-family:var(--font-mono);font-size:11px;color:var(--check);background:var(--check-soft);padding:3px 9px;border-radius:999px;white-space:nowrap}
+.tabs{display:flex;gap:2px;overflow-x:auto}
+.tabs button{border:0;background:none;padding:10px 14px 9px;font-weight:500;color:var(--muted);border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap;min-height:44px;display:flex;align-items:center;gap:7px}
+.tabs button:hover{color:var(--ink)}
+.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.badge{font-family:var(--font-mono);font-size:11px;background:var(--check-soft);color:var(--check);border-radius:999px;padding:0 7px;line-height:18px}
+.badge:empty{display:none}
+main{padding-block:22px 56px}
+.panel-head{display:flex;flex-direction:column;gap:6px;margin-bottom:16px}
+
+/* controls */
+.btn{border:1px solid var(--line-2);background:var(--surface);border-radius:8px;padding:8px 13px;min-height:40px;cursor:pointer;font-weight:500;color:var(--ink)}
+.btn:hover:not(:disabled){border-color:var(--ink-2)}
+.btn:disabled{opacity:.45;cursor:default}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.primary:hover:not(:disabled){filter:brightness(1.08);border-color:var(--accent)}
+.btn[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--ink)}
+.btn.small{min-height:32px;padding:4px 10px;font-size:13px}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;margin-block:12px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 18px;min-width:0}
+.card > h3{margin-bottom:10px}
+.count{font-family:var(--font-mono);font-size:12px;color:var(--muted);font-weight:400;margin-left:6px}
+select{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line-2);border-radius:7px;padding:6px 8px;min-height:36px}
+
+/* gate review */
+.gates-layout{display:grid;grid-template-columns:minmax(0,1fr) 410px;gap:20px;align-items:start}
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.stat{background:var(--surface);padding:12px 14px;display:flex;flex-direction:column;gap:2px}
+.stat b{font-family:var(--font-display);font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1}
+.stat span{color:var(--muted);font-size:12px}
+.stat.s-ok b{color:var(--ok)} .stat.s-check b{color:var(--check)} .stat.s-mine b{color:var(--accent)}
+.legend-row{display:flex;flex-wrap:wrap;gap:6px 16px;color:var(--muted);font-size:12px;margin-bottom:10px}
+.legend-row span{display:inline-flex;align-items:center;gap:6px}
+.dot{width:9px;height:9px;display:inline-block;flex:none;border-radius:50%;background:var(--muted)}
+.d-ref{background:transparent;border:2px solid var(--accent)}
+.d-ok{background:var(--ok)}
+.d-check{background:var(--check);border-radius:1px;transform:rotate(45deg) scale(.9)}
+.d-approved{background:var(--ok);box-shadow:0 0 0 2px var(--surface),0 0 0 3.5px var(--ok);transform:scale(.75)}
+.d-edited{background:var(--accent);border-radius:2px}
+.gridwrap{overflow:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.ggrid{border-collapse:separate;border-spacing:0}
+.ggrid thead th{font-weight:600;text-align:left;padding:10px 8px 8px;border-bottom:1px solid var(--line);white-space:nowrap;vertical-align:bottom}
+.ggrid thead th small{display:block;font-weight:400;color:var(--muted);font-size:11px}
+.ggrid td{padding:3px;border-bottom:1px solid var(--line)}
+.ggrid tr:last-child td,.ggrid tr:last-child th{border-bottom:0}
+.rowh{position:sticky;left:0;z-index:1;background:var(--surface);text-align:left;padding:8px 12px;min-width:132px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);font-weight:400}
+.rowh b{display:block;font-weight:600;font-size:13px;white-space:nowrap}
+.rowh small{display:block;color:var(--muted);font-size:11px;white-space:nowrap}
+.tag{display:inline-block;margin-top:3px;font-style:normal;font-family:var(--font-mono);font-size:10px;color:var(--accent);background:var(--accent-soft);border-radius:4px;padding:0 5px}
+.cell{display:flex;flex-direction:column;gap:3px;padding:4px;border:1.5px solid transparent;border-radius:8px;background:none;cursor:pointer}
+.cell:hover{border-color:var(--line-2)}
+.cell canvas{width:84px;height:84px;display:block;border-radius:3px}
+.cap{display:flex;justify-content:space-between;align-items:center;font-family:var(--font-mono);font-size:11px;padding-inline:2px}
+.cap b{font-weight:500;font-variant-numeric:tabular-nums}
+.cell.s-check{border-color:var(--check);background:var(--check-soft)}
+.cell.sel{outline:2.5px solid var(--accent);outline-offset:1px}
+.steps{margin-top:16px}
+.steps summary{cursor:pointer;font-weight:600;padding:2px 0}
+.steps ol{list-style:none;margin:10px 0 12px;padding:0;display:flex;flex-direction:column;gap:6px;max-height:240px;overflow:auto}
+.steps li{display:grid;grid-template-columns:44px minmax(0,1fr);gap:8px;font-size:13px;color:var(--ink-2)}
+.steps time{font-family:var(--font-mono);font-size:11px;color:var(--muted);padding-top:2px}
+
+.inspector{position:sticky;top:12px;display:flex;flex-direction:column;gap:12px}
+.ins-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.ins-head h3{font-family:var(--font-display);font-size:22px;font-weight:700}
+.meta{color:var(--muted);font-size:12px}
+.pill{font-family:var(--font-mono);font-size:11px;border-radius:999px;padding:2px 9px;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;border:1px solid currentColor}
+.pill.ref{color:var(--accent)} .pill.ok{color:var(--ok)} .pill.check{color:var(--check);background:var(--check-soft)} .pill.approved{color:var(--ok);background:var(--ok-soft)} .pill.edited{color:var(--accent);background:var(--accent-soft)}
+.plotbox canvas{display:block;width:100%;touch-action:none;border-radius:6px}
+.ins-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0}
+.ins-stats div{background:var(--surface-2);border-radius:8px;padding:7px 9px;min-width:0}
+.ins-stats dt{font-size:11px;color:var(--muted)}
+.ins-stats dd{margin:0;font-family:var(--font-mono);font-size:14px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.notes{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}
+.notes li{font-size:13px;color:var(--ink-2);padding-left:14px;position:relative}
+.notes li::before{content:"";position:absolute;left:2px;top:.62em;width:5px;height:5px;border-radius:50%;background:var(--line-2)}
+.notes.check li:first-child{color:var(--ink)}
+.notes.check li:first-child::before{background:var(--check)}
+.ins-actions{display:flex;flex-wrap:wrap;gap:8px}
+.hint{font-size:12px;color:var(--muted)}
+.ins-nav{display:flex;justify-content:space-between;gap:8px}
+
+/* results */
+.chiprow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:14px}
+.chip{display:inline-flex;gap:6px;align-items:center;border:1px solid var(--line-2);border-radius:999px;padding:3px 10px;font-size:12px;background:var(--surface)}
+.chip b{font-weight:600}
+.chip.muted{color:var(--muted)}
+.banner{display:flex;flex-wrap:wrap;align-items:center;gap:10px;justify-content:space-between;background:var(--check-soft);border:1px solid var(--check);color:var(--ink);border-radius:10px;padding:10px 14px;margin-bottom:14px}
+.res-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,520px),1fr));gap:16px}
+.card header{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.card header h3{font-family:var(--font-display);font-size:19px;font-weight:700}
+.unit{color:var(--muted);font-size:12px}
+.chart{overflow-x:auto}
+.chart svg{display:block;max-width:100%;height:auto}
+.rowtitle{font-family:var(--font-mono);font-size:12px;color:var(--muted);margin-top:8px}
+.statlist{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--ink-2)}
+.statlist b{color:var(--ink);font-weight:600}
+.mono{font-family:var(--font-mono);font-size:12px}
+pre.table{font-family:var(--font-mono);font-size:12px;background:var(--surface-2);border-radius:8px;padding:10px 12px;overflow:auto;max-height:260px;margin:8px 0 0;white-space:pre}
+details.prism{margin-top:10px}
+details.prism summary{cursor:pointer;font-size:13px;color:var(--ink-2)}
+.robust{grid-column:1 / -1}
+.verdict{font-size:14px;margin-top:6px}
+.verdict b{font-weight:600}
+.lockrow{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;border-top:1px solid var(--line);padding-top:10px;margin-top:10px;font-size:13px;color:var(--ink-2)}
+.lockrow .warn{color:var(--check)}
+.stepbtns{display:flex;flex-wrap:wrap;gap:4px}
+svg .ax{fill:var(--muted);font-family:var(--font-mono);font-size:10px}
+svg .lbl{fill:var(--ink-2);font-family:var(--font-body);font-size:11px}
+svg .lblb{fill:var(--ink);font-family:var(--font-body);font-size:11.5px;font-weight:600}
+svg .grid{stroke:var(--line);stroke-width:1}
+svg .zero{stroke:var(--ink-2);stroke-width:1;stroke-dasharray:4 3}
+
+/* explore */
+.ex-layout{display:grid;grid-template-columns:240px minmax(0,1fr);gap:20px;align-items:start}
+.tree ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+.tree button{width:100%;text-align:left;border:0;background:none;border-radius:8px;padding:7px 8px 7px calc(8px + var(--d,0) * 14px);cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:6px;min-height:40px}
+.tree button:hover{background:var(--surface-2)}
+.tree button[aria-current="true"]{background:var(--accent-soft)}
+.tree b{font-weight:600}
+.tree small{display:block;color:var(--muted);font-size:11px}
+.flagn{font-family:var(--font-mono);font-size:11px;color:var(--check);background:var(--check-soft);border-radius:999px;padding:0 6px}
+.ex-head{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:10px;margin-bottom:12px}
+.ex-head label{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--ink-2)}
+.ex-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}
+figure{margin:0}
+figcaption{font-size:13px;color:var(--ink-2);margin-bottom:8px}
+#ex-overlay{display:block;width:100%}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--ink-2);margin-top:8px}
+.legend i{width:10px;height:10px;border-radius:2px;display:inline-block;margin-right:6px;vertical-align:-1px}
+.ridge svg{display:block;width:100%;height:auto}
+.ridge .rrow{cursor:pointer}
+.ridge .rrow:hover .hit,.ridge .rrow:focus .hit{fill:var(--surface-2)}
+.ridge .rrow:focus{outline:none}
+
+/* agent */
+.ag-layout{display:grid;grid-template-columns:320px minmax(0,1fr);gap:20px;align-items:start}
+.tools{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:9px}
+.tools code{font-family:var(--font-mono);font-size:12px;color:var(--accent)}
+.tools span{display:block;font-size:12px;color:var(--ink-2)}
+.ag-note{font-size:12px;color:var(--muted);margin-bottom:10px}
+.chat{display:flex;flex-direction:column;gap:14px;margin-bottom:12px}
+.msg-q{align-self:flex-end;background:var(--accent);color:var(--accent-ink);border-radius:14px 14px 4px 14px;padding:8px 13px;max-width:80%}
+.msg-a{display:flex;flex-direction:column;gap:8px;min-width:0}
+.call{display:flex;flex-wrap:wrap;gap:6px;align-items:baseline;font-family:var(--font-mono);font-size:12px;background:var(--surface-2);border-radius:8px;padding:6px 10px;color:var(--ink-2);overflow-wrap:anywhere}
+.call .fn{color:var(--accent);font-weight:500}
+.reply{font-size:14px;max-width:75ch}
+.ag-form{display:flex;gap:8px}
+.ag-form input{flex:1;min-width:0;font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line-2);border-radius:8px;padding:9px 12px;min-height:44px}
+.prompts{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.mini-table{border-collapse:collapse;font-size:13px;width:100%}
+.mini-table th,.mini-table td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+.mini-table th{font-size:11px;color:var(--muted);font-weight:500}
+
+/* study sheet */
+.st-layout{display:grid;grid-template-columns:minmax(0,1fr) 390px;gap:20px;align-items:start}
+.stack{display:flex;flex-direction:column;gap:16px;min-width:0}
+.tablewrap{overflow-x:auto}
+.sheet{border-collapse:collapse;width:100%;font-size:13px}
+.sheet th,.sheet td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+.sheet thead th{font-size:12px;color:var(--muted);font-weight:500}
+.sheet td.mono{font-variant-numeric:tabular-nums}
+.role{font-family:var(--font-mono);font-size:10px;border-radius:4px;padding:0 5px;margin-left:6px;background:var(--surface-2);color:var(--ink-2)}
+.role.compare{background:var(--accent-soft);color:var(--accent)}
+.roles{display:flex;flex-direction:column;gap:10px}
+.roles .r{display:grid;grid-template-columns:minmax(0,1fr) 150px;gap:8px;align-items:center}
+.roles .r b{display:block}
+.roles .r small{display:block;color:var(--muted);font-size:11px;overflow-wrap:anywhere}
+.built{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px}
+.built li{display:grid;grid-template-columns:78px minmax(0,1fr);gap:10px;font-size:13px;color:var(--ink-2)}
+.built li b{font-family:var(--font-mono);font-size:11px;color:var(--muted);font-weight:500;padding-top:2px;text-transform:uppercase;letter-spacing:.04em}
+
+/* toast + modal */
+#toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);border-radius:10px;padding:10px 16px;font-size:13px;max-width:min(560px,calc(100vw - 32px));box-shadow:0 6px 24px rgba(0,0,0,.18);z-index:30}
+#modal{position:fixed;inset:0;background:rgba(10,12,16,.45);display:flex;align-items:center;justify-content:center;padding:16px;z-index:40}
+#modal .card{max-width:780px;width:100%;max-height:calc(100vh - 32px);overflow:auto;display:flex;flex-direction:column;gap:10px}
+#modal pre{max-height:50vh}
+
+@media (max-width:1100px){
+  .gates-layout,.st-layout,.ag-layout{grid-template-columns:minmax(0,1fr)}
+  .inspector{position:static}
+  .ex-grid{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:760px){
+  .ex-layout{grid-template-columns:minmax(0,1fr)}
+  h2{font-size:22px}
+  .brand .sub{display:none}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
+</style>
+
+<header class="top">
+  <div class="wrap top-in">
+    <div class="brand">
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="14" cy="14" r="11.5"/><circle cx="14" cy="14" r="3"/><path d="M14 2.5v8.5M14 17v8.5M2.5 14h8.5M17 14h8.5M5.9 5.9l6 6M16.1 16.1l6 6M22.1 5.9l-6 6M11.9 16.1l-6 6"/></svg>
+      <span class="name">Wheelwright</span>
+      <span class="sub">flow cytometry analysis, built from your study sheet</span>
+    </div>
+    <div class="switch" role="radiogroup" aria-label="Study">
+      <button role="radio" data-study="treg" aria-checked="true"><b>Treg infiltration</b><small>3 donors · control vs treated</small></button>
+      <button role="radio" data-study="cart" aria-checked="false"><b>CAR-T biodistribution</b><small>12 mice · 3 tissues · 2 days</small></button>
+    </div>
+    <span class="sim">Simulated example data</span>
+  </div>
+  <nav class="wrap tabs" role="tablist" aria-label="Workspace">
+    <button role="tab" data-tab="study" aria-selected="false">Study sheet</button>
+    <button role="tab" data-tab="gates" aria-selected="true">Gate review <span class="badge" id="badge"></span></button>
+    <button role="tab" data-tab="results" aria-selected="false">Results</button>
+    <button role="tab" data-tab="explore" aria-selected="false">Explore</button>
+    <button role="tab" data-tab="agent" aria-selected="false">Agent</button>
+  </nav>
+</header>
+
+<main class="wrap">
+  <section id="tab-study" role="tabpanel" hidden></section>
+  <section id="tab-gates" role="tabpanel"></section>
+  <section id="tab-results" role="tabpanel" hidden></section>
+  <section id="tab-explore" role="tabpanel" hidden></section>
+  <section id="tab-agent" role="tabpanel" hidden></section>
+</main>
+<div id="toast" role="status" aria-live="polite" hidden></div>
+<div id="modal" hidden></div>
+
+<script id="engine">
+const Eng = (() => {
+  'use strict';
+  /* ---------- random numbers ---------- */
+  function mulberry32(a){ return function(){ a|=0; a=(a+0x6D2B79F5)|0; let t=Math.imul(a^(a>>>15),1|a); t=(t+Math.imul(t^(t>>>7),61|t))^t; return ((t^(t>>>14))>>>0)/4294967296; }; }
+  function hashStr(s){ let h=2166136261; for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619); } return h>>>0; }
+  function makeRng(seed){
+    const u=mulberry32(seed); let spare=null; const r=()=>u();
+    r.n=(m,s)=>{ if(spare!==null){ const v=spare; spare=null; return m+s*v; } let a,b,q; do{ a=u()*2-1; b=u()*2-1; q=a*a+b*b; }while(q>=1||q===0); const f=Math.sqrt(-2*Math.log(q)/q); spare=b*f; return m+s*a*f; };
+    return r;
+  }
+
+  /* ---------- channels ---------- */
+  // Fluorescence is stored in display units (decades, like a logicle axis); scatter in thousands.
+  const FL=[-0.5,5.2], SC=[0,262], RT=[0.3,1.15];
+  const SCAT=id=>({id,label:id,kind:'scatter'});
+  const FLU=(id,fluor,label)=>({id,label:label||id,fluor,kind:'fluor'});
+  const chRange=ch=>ch.kind==='scatter'?SC:FL;
+  const chUnit=ch=>ch.kind==='scatter'?30:1;
+  const cs=v=>v<0.5?0.5:(v>261.5?261.5:v);
+  const cf=v=>v<-0.45?-0.45:(v>5.15?5.15:v);
+  const mean=a=>a.length?a.reduce((s,x)=>s+x,0)/a.length:NaN;
+  const sdev=a=>{ if(a.length<2) return 0; const m=mean(a); return Math.sqrt(a.reduce((s,x)=>s+(x-m)*(x-m),0)/(a.length-1)); };
+
+  function finalize(S){
+    S.ch={}; S.channels.forEach(c=>S.ch[c.id]=c);
+    S.G={}; S.gates.forEach((g,i)=>{ g.i=i; S.G[g.id]=g; });
+    S.gates.forEach(g=>{
+      g.anc=[]; let p=g.parent; while(p){ g.anc.push(p); p=S.G[p].parent; } g.depth=g.anc.length;
+      if(g.type==='thr') g.conds.forEach(c=>{ const lab=S.ch[c.ch].label; c.lowName=c.lowName||(lab+'− cells'); c.highName=c.highName||(lab+'+ cells'); });
+    });
+    S.factorMap={}; S.factors.forEach(f=>S.factorMap[f.id]=f);
+    S.R={}; S.readouts.forEach(r=>S.R[r.id]=r);
+    return S;
+  }
+
+  /* ---------- study 1: Treg infiltration ---------- */
+  function tregStudy(){
+    const channels=[SCAT('FSC-A'),SCAT('FSC-H'),SCAT('SSC-A'),FLU('Viability','BV510','Viability'),FLU('CD3','BUV395'),FLU('CD4','BUV496'),FLU('CD8','BV711'),FLU('CD25','PE'),FLU('CD127','BV421')];
+    const gates=[
+      {id:'singlets',name:'Singlets',parent:null,type:'ratio',x:'FSC-A',y:'FSC-H',t:0.78,lowName:'doublets',highName:'single cells'},
+      {id:'lymph',name:'Lymphocytes',parent:'singlets',type:'rect',x:'FSC-A',y:'SSC-A',r:[48,100,10,50],what:'lymphocyte cluster'},
+      {id:'live',name:'Live',parent:'lymph',type:'thr',x:'Viability',y:'SSC-A',conds:[{ch:'Viability',op:'<',t:2.2,method:'valley',lowName:'live cells',highName:'dead cells'}]},
+      {id:'cd3',name:'CD3+',parent:'live',type:'thr',x:'CD3',y:'SSC-A',conds:[{ch:'CD3',op:'>',t:2.2,method:'valley'}]},
+      {id:'cd4',name:'CD4+',parent:'cd3',type:'thr',x:'CD4',y:'CD8',conds:[{ch:'CD4',op:'>',t:2.2,method:'valley'},{ch:'CD8',op:'<',t:2.2,method:'valley'}]},
+      {id:'cd8',name:'CD8+',parent:'cd3',type:'thr',x:'CD4',y:'CD8',conds:[{ch:'CD8',op:'>',t:2.2,method:'valley'},{ch:'CD4',op:'<',t:2.2,method:'valley'}]},
+      {id:'treg',name:'Tregs',parent:'cd4',type:'thr',x:'CD25',y:'CD127',conds:[{ch:'CD25',op:'>',t:3.3,method:'follow',sweep:true,lowName:'CD25 low cells',highName:'CD25 high cells'},{ch:'CD127',op:'<',t:2.2,method:'follow',lowName:'CD127 low cells',highName:'CD127+ cells'}]}
+    ];
+    const truth={D01:[0.046,0.081],D02:[0.0585,0.091],D03:[0.056,0.092]};
+    const samples=[];
+    ['D01','D02','D03'].forEach(d=>['Control','Treated'].forEach((c,ci)=>{
+      const id=d+' '+c; const r=makeRng(hashStr('treg-drift-'+id));
+      const gen={treg:truth[d][ci],act:ci?0.15:0.10,dead:0.14+r.n(0,0.02),sc:1+r.n(0,0.03),d:{},cd3pos:3.2,cd25extra:0};
+      ['Viability','CD3','CD4','CD8','CD25','CD127'].forEach(ch=>gen.d[ch]=r.n(0,0.07));
+      if(id==='D01 Control'){ gen.sc=1; gen.d={}; gen.dead=0.14; }
+      if(id==='D02 Treated') gen.cd3pos=2.5;
+      if(id==='D03 Treated'){ gen.d.CD25=0.42; gen.cd25extra=0.12; }
+      if(id==='D03 Control') gen.dead=0.32;
+      samples.push({id,label:id,sub:'',meta:{Donor:d,Condition:c},gen});
+    }));
+    return finalize({
+      id:'treg',name:'Treg infiltration under treatment',short:'Treg study',tagline:'Tumour digests from 3 donors, each split into a control and a treated sample',
+      n:30000,channels,gates,samples,gen:genTreg,
+      factors:[{id:'Donor',levels:['D01','D02','D03'],noun:'donor',plural:'donors'},{id:'Condition',levels:['Control','Treated']}],
+      defaultRoles:{Donor:'subject',Condition:'compare'},
+      readouts:[
+        {id:'treg_pct',name:'Tregs',unit:'% of CD4+ T cells',num:'treg',den:'cd4',kind:'pct',keys:['treg','regulatory']},
+        {id:'cd8_treg',name:'CD8 : Treg ratio',unit:'CD8+ T cells per Treg',num:'cd8',den:'treg',kind:'ratio',keys:['cd8','ratio']}
+      ],
+      primary:{readout:'treg_pct',filter:{}},sweep:{gate:'treg',cond:0},
+      chips:['Which gates should I check?','Tregs % of CD4+, treated vs control','Does the Treg result hold if I move the CD25 line?','Set the CD3+ line on D02 Treated to 2.0','Prism table for Tregs']
+    });
+  }
+  function genTreg(s,n){
+    const g=s.gen, r=makeRng(hashStr('treg-ev-'+s.id)), dd=k=>g.d[k]||0;
+    const A=new Float32Array(n),H=new Float32Array(n),SS=new Float32Array(n),V=new Float32Array(n),C3=new Float32Array(n),C4=new Float32Array(n),C8=new Float32Array(n),C25=new Float32Array(n),C127=new Float32Array(n);
+    for(let i=0;i<n;i++){
+      const cls=r(), dead=r()<g.dead;
+      let fsc,ssc,via,cd3=r.n(1,.35),cd4=r.n(.9,.3),cd8=r.n(.9,.3),cd25=r.n(1.2,.4),cd127=r.n(1.4,.45);
+      if(cls<0.42){
+        fsc=r.n(72,7); ssc=r.n(28,5);
+        if(r()<0.66){
+          cd3=r.n(g.cd3pos,g.cd3pos<3?0.32:0.25);
+          const u=r();
+          if(u<0.62){
+            cd4=r.n(3.3,.2); cd8=r.n(.9,.3);
+            if(r()<g.treg){ cd25=r.n(3.65,.2); cd127=r.n(1.55,.25); }
+            else if(r()<g.act){ cd25=r.n(3.0,.3); cd127=r.n(2.4,.3); }
+            else { cd25=r.n(1.7,.45); cd127=r.n(2.85,.25); }
+          } else if(u<0.95){ cd8=r.n(3.5,.2); cd4=r.n(.9,.3); cd25=r.n(1.3,.4); cd127=r.n(2.6,.35); }
+          else { cd25=r.n(1.3,.4); cd127=r.n(2.3,.4); }
+        } else if(r()<0.3){ cd8=r.n(2.6,.3); }
+      } else if(cls<0.62){ fsc=r.n(112,14); ssc=r.n(70,14); cd4=r.n(2.0,.3); }
+      else if(cls<0.9){ fsc=r.n(170,24); ssc=r.n(135,28); }
+      else { fsc=r.n(22,9); ssc=r.n(18,9); }
+      via=cls>=0.9?r.n(2.4,.9):(dead?r.n(3.4,.3):r.n(1.0,.3));
+      if(dead) fsc*=0.82;
+      fsc*=g.sc; ssc*=g.sc;
+      let fa=fsc,fh;
+      if(r()<0.1){ fa=fsc*1.85; fh=fa*r.n(0.56,0.05); } else fh=fsc*r.n(0.93,0.03);
+      A[i]=cs(fa); H[i]=cs(fh); SS[i]=cs(ssc);
+      V[i]=cf(via+dd('Viability')); C3[i]=cf(cd3+dd('CD3')); C4[i]=cf(cd4+dd('CD4')); C8[i]=cf(cd8+dd('CD8'));
+      C25[i]=cf(cd25+dd('CD25')+(g.cd25extra?r.n(0,g.cd25extra):0)); C127[i]=cf(cd127+dd('CD127'));
+    }
+    return {n,ch:{'FSC-A':A,'FSC-H':H,'SSC-A':SS,Viability:V,CD3:C3,CD4:C4,CD8:C8,CD25:C25,CD127:C127}};
+  }
+
+  /* ---------- study 2: CAR-T biodistribution ---------- */
+  function cartStudy(){
+    const channels=[SCAT('FSC-A'),SCAT('FSC-H'),SCAT('SSC-A'),FLU('Viability','eF780','Viability'),FLU('hCD45','BV510'),FLU('CD3','BUV395'),FLU('CAR','PE','CAR'),FLU('CD69','BV421'),FLU('Ki-67','AF647')];
+    const gates=[
+      {id:'singlets',name:'Singlets',parent:null,type:'ratio',x:'FSC-A',y:'FSC-H',t:0.78,lowName:'doublets',highName:'single cells'},
+      {id:'live',name:'Live',parent:'singlets',type:'thr',x:'Viability',y:'SSC-A',conds:[{ch:'Viability',op:'<',t:2.2,method:'valley',lowName:'live cells',highName:'dead cells'}]},
+      {id:'hcd45',name:'hCD45+',parent:'live',type:'thr',x:'hCD45',y:'SSC-A',conds:[{ch:'hCD45',op:'>',t:2.2,method:'valley',lowName:'mouse and tumour cells',highName:'human immune cells'}]},
+      {id:'cd3',name:'CD3+',parent:'hcd45',type:'thr',x:'CD3',y:'SSC-A',conds:[{ch:'CD3',op:'>',t:2.2,method:'valley'}]},
+      {id:'car',name:'CAR+',parent:'cd3',type:'thr',x:'CAR',y:'CD3',conds:[{ch:'CAR',op:'>',t:2.1,method:'follow',sweep:true}]},
+      {id:'cd69',name:'CD69+',parent:'cd3',type:'thr',x:'CD69',y:'CD3',conds:[{ch:'CD69',op:'>',t:2.1,method:'valley'}]},
+      {id:'ki67',name:'Ki-67+',parent:'cd3',type:'thr',x:'Ki-67',y:'CD3',conds:[{ch:'Ki-67',op:'>',t:2.1,method:'valley'}]}
+    ];
+    const H={'CAR-T':{'Day 7':{Tumour:.03,Blood:.015,Spleen:.04},'Day 14':{Tumour:.07,Blood:.01,Spleen:.035}},'Mock T':{'Day 7':{Tumour:.012,Blood:.01,Spleen:.03},'Day 14':{Tumour:.01,Blood:.006,Spleen:.025}}};
+    const C69={'CAR-T':{'Day 7':{Tumour:.55,Blood:.08,Spleen:.2},'Day 14':{Tumour:.42,Blood:.07,Spleen:.18}},'Mock T':{'Day 7':{Tumour:.15,Blood:.05,Spleen:.08},'Day 14':{Tumour:.12,Blood:.05,Spleen:.08}}};
+    const KI={'CAR-T':{'Day 7':{Tumour:.5,Blood:.2,Spleen:.3},'Day 14':{Tumour:.35,Blood:.12,Spleen:.22}},'Mock T':{'Day 7':{Tumour:.1,Blood:.05,Spleen:.08},'Day 14':{Tumour:.1,Blood:.05,Spleen:.08}}};
+    const DEAD={Tumour:.25,Blood:.08,Spleen:.12};
+    const plan=[['Day 7','CAR-T',['M01','M02','M03']],['Day 7','Mock T',['M07','M08','M09']],['Day 14','CAR-T',['M04','M05','M06']],['Day 14','Mock T',['M10','M11','M12']]];
+    const samples=[];
+    plan.forEach(([day,grp,ms])=>ms.forEach(m=>['Tumour','Blood','Spleen'].forEach(t=>{
+      const id=m+' '+t; const r=makeRng(hashStr('cart-drift-'+id)); const ln=()=>Math.exp(r.n(0,0.18));
+      const gen={tissue:t,h:H[grp][day][t]*ln(),car:grp==='CAR-T'?(t==='Tumour'?0.45:0.4)*Math.min(1.1,ln()):0.003,
+        cd69:Math.min(.85,C69[grp][day][t]*ln()),ki:Math.min(.85,KI[grp][day][t]*ln()),dead:Math.min(.6,DEAD[t]*ln()),sc:1+r.n(0,.03),d:{},hpos:3.3};
+      ['Viability','hCD45','CD3','CAR','CD69','Ki-67'].forEach(ch=>gen.d[ch]=r.n(0,0.07));
+      if(id==='M01 Tumour'){ gen.sc=1; gen.d={}; }
+      if(id==='M02 Blood') gen.hpos=2.55;
+      if(id==='M08 Tumour') gen.d.CAR=0.45;
+      if(id==='M05 Tumour') gen.dead=0.5;
+      samples.push({id,label:m+' · '+t,sub:grp+' · '+day,meta:{Mouse:m,Group:grp,Tissue:t,Day:day},gen});
+    })));
+    return finalize({
+      id:'cart',name:'CAR-T biodistribution in a solid tumour',short:'CAR-T study',tagline:'NSG mice with human tumour xenografts, dosed with CAR-T or mock-transduced T cells, harvested at day 7 or day 14',
+      n:20000,channels,gates,samples,gen:genCart,
+      factors:[{id:'Mouse',levels:['M01','M02','M03','M04','M05','M06','M07','M08','M09','M10','M11','M12'],noun:'mouse',plural:'mice'},{id:'Group',levels:['Mock T','CAR-T']},{id:'Tissue',levels:['Tumour','Blood','Spleen']},{id:'Day',levels:['Day 7','Day 14']}],
+      defaultRoles:{Mouse:'subject',Group:'compare',Tissue:'split',Day:'split'},
+      readouts:[
+        {id:'car_live',name:'CAR T cells',unit:'% of live cells',num:'car',den:'live',kind:'pct',digits:2,keys:['car t','car-t cells','car+','infiltrat','reach']},
+        {id:'cd69_t',name:'Activated T cells (CD69+)',unit:'% of human T cells',num:'cd69',den:'cd3',kind:'pct',keys:['cd69','activat']},
+        {id:'ki67_t',name:'Proliferating T cells (Ki-67+)',unit:'% of human T cells',num:'ki67',den:'cd3',kind:'pct',keys:['ki-67','ki67','prolif']}
+      ],
+      primary:{readout:'car_live',filter:{Tissue:'Tumour',Day:'Day 14'}},sweep:{gate:'car',cond:0},
+      chips:['Which gates should I check?','CAR T cells in the tumour, CAR-T vs mock','Compare tissues within each mouse','Does the CAR T result hold if I move the CAR line?','Prism table for CD69+']
+    });
+  }
+  function genCart(s,n){
+    const g=s.gen, r=makeRng(hashStr('cart-ev-'+s.id)), dd=k=>g.d[k]||0;
+    const A=new Float32Array(n),H=new Float32Array(n),SS=new Float32Array(n),V=new Float32Array(n),HC=new Float32Array(n),C3=new Float32Array(n),CAR=new Float32Array(n),C69=new Float32Array(n),KI=new Float32Array(n);
+    for(let i=0;i<n;i++){
+      const dead=r()<g.dead;
+      let fsc,ssc,h45=r.n(1.0,.35),cd3=r.n(1.0,.35),car=r.n(1.1,.3),c69=r.n(1.2,.35),ki=r.n(1.0,.35);
+      if(r()<g.h){
+        fsc=r.n(75,8); ssc=r.n(30,6); h45=r.n(g.hpos,.25);
+        if(r()<0.95){ cd3=r.n(3.2,.25); if(r()<g.car) car=r.n(3.0,.4); if(r()<g.cd69) c69=r.n(2.9,.3); if(r()<g.ki) ki=r.n(3.0,.3); }
+      } else if(g.tissue==='Tumour'&&r()<0.6){ fsc=r.n(165,25); ssc=r.n(120,30); if(r()<0.4) ki=r.n(3.1,.3); }
+      else { fsc=r.n(72,13); const gran=r()<0.3; ssc=gran?r.n(110,25):r.n(32,8); }
+      const via=dead?r.n(3.4,.3):r.n(1.0,.3);
+      if(dead) fsc*=0.82;
+      fsc*=g.sc; ssc*=g.sc;
+      let fa=fsc,fh;
+      if(r()<0.08){ fa=fsc*1.85; fh=fa*r.n(0.56,0.05); } else fh=fsc*r.n(0.93,0.03);
+      A[i]=cs(fa); H[i]=cs(fh); SS[i]=cs(ssc);
+      V[i]=cf(via+dd('Viability')); HC[i]=cf(h45+dd('hCD45')); C3[i]=cf(cd3+dd('CD3')); CAR[i]=cf(car+dd('CAR')); C69[i]=cf(c69+dd('CD69')); KI[i]=cf(ki+dd('Ki-67'));
+    }
+    return {n,ch:{'FSC-A':A,'FSC-H':H,'SSC-A':SS,Viability:V,hCD45:HC,CD3:C3,CAR,CD69:C69,'Ki-67':KI}};
+  }
+
+  function generate(S){ return S.samples.map(s=>S.gen(s,S.n)); }
+
+  /* ---------- gating ---------- */
+  const cloneP=p=>JSON.parse(JSON.stringify(p));
+  function templateP(g){ if(g.type==='ratio') return {t:g.t}; if(g.type==='rect') return {r:g.r.slice()}; return {ts:g.conds.map(c=>c.t)}; }
+  function parentIdx(st,si,g){ return g.parent?st.idx[si][g.parent]:st.all[si]; }
+  function filterIdx(st,si,g,p,par){
+    const d=st.data[si].ch, out=new Uint32Array(par.length); let m=0;
+    if(g.type==='ratio'){ const X=d[g.x],Y=d[g.y],t=p.t; for(let k=0;k<par.length;k++){ const i=par[k]; if(Y[i]>=t*X[i]) out[m++]=i; } }
+    else if(g.type==='rect'){ const X=d[g.x],Y=d[g.y],[x0,x1,y0,y1]=p.r; for(let k=0;k<par.length;k++){ const i=par[k],x=X[i],y=Y[i]; if(x>=x0&&x<=x1&&y>=y0&&y<=y1) out[m++]=i; } }
+    else {
+      const cc=g.conds.map((c,k)=>({a:d[c.ch],gt:c.op==='>',t:p.ts[k]}));
+      for(let k=0;k<par.length;k++){ const i=par[k]; let ok=true; for(let j=0;j<cc.length;j++){ const c=cc[j],v=c.a[i]; if(c.gt?v<=c.t:v>=c.t){ ok=false; break; } } if(ok) out[m++]=i; }
+    }
+    return out.slice(0,m);
+  }
+  function vals(st,si,ch,idx){ const a=st.data[si].ch[ch], o=new Float32Array(idx.length); for(let k=0;k<idx.length;k++) o[k]=a[idx[k]]; return o; }
+  function ratioVals(st,si,g,idx){ const X=st.data[si].ch[g.x],Y=st.data[si].ch[g.y],o=new Float32Array(idx.length); for(let k=0;k<idx.length;k++){ const i=idx[k]; o[k]=X[i]>0?Y[i]/X[i]:0; } return o; }
+  function kde1(v,lo,hi,nb){
+    nb=nb||160; const step=(hi-lo)/nb, h=new Float64Array(nb);
+    for(let k=0;k<v.length;k++){ const b=Math.floor((v[k]-lo)/step); if(b>=0&&b<nb) h[b]++; }
+    const sig=v.length<600?6:(v.length<2000?4:2.5), rad=Math.ceil(sig*3), ker=[]; let ks=0;
+    for(let j=-rad;j<=rad;j++){ const w=Math.exp(-0.5*j*j/(sig*sig)); ker.push(w); ks+=w; }
+    const s=new Float64Array(nb);
+    for(let b=0;b<nb;b++){ let a=0; for(let j=-rad;j<=rad;j++){ const bb=b+j; if(bb>=0&&bb<nb) a+=h[bb]*ker[j+rad]; } s[b]=a/ks; }
+    return {s,nb,lo,step,x:b=>lo+(b+0.5)*step,b:x=>Math.max(0,Math.min(nb-1,Math.floor((x-lo)/step)))};
+  }
+  function findValley(v,t0,unit,range){
+    const K=kde1(v,range[0],range[1]); const w=0.6*unit, W2=1.3*unit;
+    let mx=0; for(let b=0;b<K.nb;b++) mx=Math.max(mx,K.s[b]);
+    const mins=[];
+    for(let b=1;b<K.nb-1;b++){ const x=K.x(b); if(x<t0-w||x>t0+w) continue; if(K.s[b]<=K.s[b-1]&&K.s[b]<=K.s[b+1]) mins.push(b); }
+    if(!mins.length) return {found:false,t:t0,depth:0};
+    let lo=Infinity; mins.forEach(b=>{ lo=Math.min(lo,K.s[b]); });
+    const tol=lo+0.02*mx; let best=-1,bd=Infinity;
+    mins.forEach(b=>{ if(K.s[b]<=tol){ const d=Math.abs(K.x(b)-t0); if(d<bd){ bd=d; best=b; } } });
+    const x=K.x(best); let pl=0,pr=0;
+    for(let b=K.b(x-W2);b<=best;b++) pl=Math.max(pl,K.s[b]);
+    for(let b=best;b<=K.b(x+W2);b++) pr=Math.max(pr,K.s[b]);
+    const m=Math.min(pl,pr);
+    return {found:true,t:x,depth:m>0?1-K.s[best]/m:0};
+  }
+  function sideMode(v,split,side,range){
+    const f=[]; for(let k=0;k<v.length;k++){ const x=v[k]; if(side==='below'?x<split:x>split) f.push(x); }
+    if(f.length<20) return null;
+    const K=kde1(f,range[0],range[1]); let bi=0; for(let b=1;b<K.nb;b++) if(K.s[b]>K.s[bi]) bi=b; return K.x(bi);
+  }
+  function peak2d(X,Y,cx,cy,win){
+    const nb=64,[x0,x1]=chRange(cx),[y0,y1]=chRange(cy),sx=(x1-x0)/nb,sy=(y1-y0)/nb; let g=new Float64Array(nb*nb);
+    for(let k=0;k<X.length;k++){ const bx=Math.floor((X[k]-x0)/sx),by=Math.floor((Y[k]-y0)/sy); if(bx<0||bx>=nb||by<0||by>=nb) continue; g[by*nb+bx]++; }
+    for(let pass=0;pass<2;pass++){ const o=new Float64Array(nb*nb); for(let y=0;y<nb;y++) for(let x=0;x<nb;x++){ let a=0,c=0; for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){ const xx=x+dx,yy=y+dy; if(xx<0||yy<0||xx>=nb||yy>=nb) continue; a+=g[yy*nb+xx]; c++; } o[y*nb+x]=a/c; } g=o; }
+    let best=[x0+sx*nb/2,y0+sy*nb/2],bv=-1;
+    for(let y=0;y<nb;y++) for(let x=0;x<nb;x++){ const vx=x0+(x+.5)*sx,vy=y0+(y+.5)*sy; if(vx<win[0]||vx>win[1]||vy<win[2]||vy>win[3]) continue; if(g[y*nb+x]>bv){ bv=g[y*nb+x]; best=[vx,vy]; } }
+    return best;
+  }
+  const expand=r=>{ const w=r[1]-r[0],h=r[3]-r[2]; return [r[0]-.5*w,r[1]+.5*w,r[2]-.5*h,r[3]+.5*h]; };
+  function fmtAmt(a,kind){ return kind==='fluor'?a.toFixed(2)+' decades':(kind==='scatter'?a.toFixed(0)+'K':a.toFixed(2)); }
+  const sgnK=v=>(v>=0?'+':'−')+Math.abs(v).toFixed(0)+'K';
+  const FEW=120;
+
+  function refStats(st,g){
+    const par=parentIdx(st,0,g), p=st.gs[0][g.id].p, S=st.study, rs={};
+    if(g.type==='rect') rs.peak=peak2d(vals(st,0,g.x,par),vals(st,0,g.y,par),S.ch[g.x],S.ch[g.y],expand(p.r));
+    if(g.type==='thr') rs.modes=g.conds.map((c,k)=>{ if(c.method!=='follow') return null; const side=c.op==='>'?'below':'above'; const x=sideMode(vals(st,0,c.ch,par),p.ts[k],side,chRange(S.ch[c.ch])); return {side,x}; });
+    st.ref[g.id]=rs;
+  }
+  function judgeValley(res,t0,unit,low,high,kind,notes){
+    if(!res.found){ notes.push(`No dip between ${low} and ${high} near the template line, so the template position was kept. Check by eye.`); return 'check'; }
+    const shift=res.t-t0, a=Math.abs(shift);
+    if(res.depth<0.5){ notes.push(`The dip between ${low} and ${high} is shallow here, only ${Math.round(res.depth*100)}% below the smaller peak, so the line could sit anywhere across a wide range. ${kind==='fluor'?'Staining may be dimmer than in the reference. ':''}Check where it sits.`); return 'check'; }
+    if(a>0.4*unit){ notes.push(`The line moved ${fmtAmt(a,kind)} from the template to reach the dip. Check that it still separates ${low} from ${high}.`); return 'check'; }
+    notes.push(a<0.03*unit?`Placed in the dip between ${low} and ${high}, where the template had it.`:`Placed in the dip between ${low} and ${high}, ${fmtAmt(a,kind)} ${shift>0?'higher':'lower'} than the template. Clear separation.`);
+    return 'ok';
+  }
+  function autoGate(st,si,g){
+    const S=st.study, par=parentIdx(st,si,g), refP=st.gs[0][g.id].p, notes=[], few=par.length<FEW; let conf='ok', p;
+    if(g.type==='ratio'){
+      if(few) p={t:refP.t};
+      else { const res=findValley(ratioVals(st,si,g,par),refP.t,0.15,RT); p={t:res.t}; if(judgeValley(res,refP.t,0.15,g.lowName,g.highName,'ratio',notes)==='check') conf='check'; }
+    } else if(g.type==='rect'){
+      if(few) p={r:refP.r.slice()};
+      else {
+        const pk=peak2d(vals(st,si,g.x,par),vals(st,si,g.y,par),S.ch[g.x],S.ch[g.y],expand(refP.r)), rp=st.ref[g.id].peak;
+        const dx=pk[0]-rp[0], dy=pk[1]-rp[1];
+        p={r:[refP.r[0]+dx,refP.r[1]+dx,refP.r[2]+dy,refP.r[3]+dy]};
+        const big=Math.abs(dx)/(refP.r[1]-refP.r[0])>0.25||Math.abs(dy)/(refP.r[3]-refP.r[2])>0.25;
+        if(big){ conf='check'; notes.push(`The ${g.what} sits far from where it was in the reference (FSC ${sgnK(dx)}, SSC ${sgnK(dy)}). Check the box still covers it.`); }
+        else notes.push(Math.abs(dx)<1&&Math.abs(dy)<1?`The ${g.what} sits where it did in the reference, so the box stayed put.`:`Moved with the ${g.what} (FSC ${sgnK(dx)}, SSC ${sgnK(dy)}).`);
+      }
+    } else {
+      const ts=[];
+      g.conds.forEach((c,k)=>{
+        const ch=S.ch[c.ch], unit=chUnit(ch), t0=refP.ts[k];
+        if(few){ ts.push(t0); return; }
+        const v=vals(st,si,c.ch,par);
+        if(c.method==='valley'){ const res=findValley(v,t0,unit,chRange(ch)); ts.push(res.t); if(judgeValley(res,t0,unit,c.lowName,c.highName,ch.kind,notes)==='check') conf='check'; return; }
+        const rm=st.ref[g.id].modes[k]; const sm=rm&&rm.x!=null?sideMode(v,t0,rm.side,chRange(ch)):null;
+        if(sm==null){ ts.push(t0); notes.push(`Too few ${ch.label} cells to follow, so the template line was kept.`); return; }
+        const dl=sm-rm.x, a=Math.abs(dl); ts.push(t0+dl);
+        const pop=rm.side==='below'?c.lowName:c.highName;
+        if(a<0.03) notes.push(`The ${pop} sit where they did in the reference, so the ${ch.label} line stayed at the template position.`);
+        else if(a<=0.3) notes.push(`The ${pop} sit ${fmtAmt(a,'fluor')} ${dl>0?'brighter':'dimmer'} than in the reference, so the ${ch.label} line moved with them.`);
+        else { conf='check'; notes.push(`The ${pop} sit ${fmtAmt(a,'fluor')} ${dl>0?'brighter':'dimmer'} than in the reference, so the ${ch.label} line moved with them. A shift this large usually means a staining or instrument change. Check it.`); }
+      });
+      p={ts};
+    }
+    if(few) notes.push(`Only ${par.length} cells reach this gate, too few to place a line from the data, so the template position was kept.`);
+    else if(par.length){
+      const pn=g.parent?S.G[g.parent].name:'all events';
+      const a=100*filterIdx(st,si,g,refP,par).length/par.length, b=100*filterIdx(st,si,g,p,par).length/par.length;
+      if(Math.abs(a-b)>=0.5) notes.push(`Keeping the template position would give ${a.toFixed(1)}% of ${pn} instead of ${b.toFixed(1)}%.`);
+    }
+    return {p,conf,notes};
+  }
+  function placeOne(st,si,g){
+    const s=st.gs[si][g.id];
+    if(!s||s.status==='auto'){ const a=autoGate(st,si,g); st.gs[si][g.id]={p:a.p,status:'auto',conf:a.conf,notes:a.notes}; }
+    st.idx[si][g.id]=filterIdx(st,si,g,st.gs[si][g.id].p,parentIdx(st,si,g));
+  }
+  function runAuto(st){
+    const S=st.study;
+    S.gates.forEach(g=>{ st.idx[0][g.id]=filterIdx(st,0,g,st.gs[0][g.id].p,parentIdx(st,0,g)); refStats(st,g); });
+    for(let si=1;si<st.data.length;si++) S.gates.forEach(g=>placeOne(st,si,g));
+  }
+  function recomputeSample(st,si,gid){ st.study.gates.forEach(g=>{ if(g.id===gid||g.anc.includes(gid)) placeOne(st,si,g); }); }
+  function newState(S,data){
+    const st={study:S,data,gs:data.map(()=>({})),idx:data.map(()=>({})),ref:{},all:data.map(d=>{ const a=new Uint32Array(d.n); for(let i=0;i<d.n;i++) a[i]=i; return a; })};
+    S.gates.forEach(g=>{ st.gs[0][g.id]={p:templateP(g),status:'ref',conf:'ref',notes:['Gated by hand. Every other sample starts from this gate, so moving it here re-places it everywhere you haven’t edited.']}; });
+    runAuto(st); return st;
+  }
+  function countsWithDelta(st,si,gid,k,delta){
+    const S=st.study, c={}; S.gates.forEach(g=>{ c[g.id]=st.idx[si][g.id].length; });
+    const g0=S.G[gid], p=cloneP(st.gs[si][gid].p); p.ts[k]+=delta;
+    const cur={}; cur[gid]=filterIdx(st,si,g0,p,parentIdx(st,si,g0)); c[gid]=cur[gid].length;
+    S.gates.forEach(g=>{ if(g.anc.includes(gid)){ const par=cur[g.parent]||st.idx[si][g.parent]; cur[g.id]=filterIdx(st,si,g,st.gs[si][g.id].p,par); c[g.id]=cur[g.id].length; } });
+    return c;
+  }
+  function countsOf(st,si){ const c={}; st.study.gates.forEach(g=>{ c[g.id]=st.idx[si][g.id].length; }); return c; }
+  function readoutValue(ro,c){ const den=c[ro.den], num=c[ro.num]; if(den<30) return null; return ro.kind==='pct'?100*num/den:num/den; }
+  function readoutValues(st,ro){ return st.study.samples.map((s,si)=>readoutValue(ro,countsOf(st,si))); }
+
+  /* ---------- statistics ---------- */
+  function lgamma(x){ const c=[76.18009172947146,-86.50532032941677,24.01409824083091,-1.231739572450155,0.1208650973866179e-2,-0.5395239384953e-5]; let y=x,tmp=x+5.5; tmp-=(x+0.5)*Math.log(tmp); let ser=1.000000000190015; for(let j=0;j<6;j++) ser+=c[j]/++y; return -tmp+Math.log(2.5066282746310005*ser/x); }
+  function betacf(a,b,x){ const FPMIN=1e-300; const qab=a+b,qap=a+1,qam=a-1; let c=1,d=1-qab*x/qap; if(Math.abs(d)<FPMIN) d=FPMIN; d=1/d; let h=d;
+    for(let m=1;m<=300;m++){ const m2=2*m; let aa=m*(b-m)*x/((qam+m2)*(a+m2)); d=1+aa*d; if(Math.abs(d)<FPMIN) d=FPMIN; c=1+aa/c; if(Math.abs(c)<FPMIN) c=FPMIN; d=1/d; h*=d*c;
+      aa=-(a+m)*(qab+m)*x/((a+m2)*(qap+m2)); d=1+aa*d; if(Math.abs(d)<FPMIN) d=FPMIN; c=1+aa/c; if(Math.abs(c)<FPMIN) c=FPMIN; d=1/d; const del=d*c; h*=del; if(Math.abs(del-1)<3e-14) break; }
+    return h; }
+  function ibeta(x,a,b){ if(x<=0) return 0; if(x>=1) return 1; const bt=Math.exp(lgamma(a+b)-lgamma(a)-lgamma(b)+a*Math.log(x)+b*Math.log(1-x)); return x<(a+1)/(a+b+2)?bt*betacf(a,b,x)/a:1-bt*betacf(b,a,1-x)/b; }
+  const tTwo=(t,df)=>ibeta(df/(df+t*t),df/2,0.5);
+  function tq(df){ let lo=0,hi=200; for(let i=0;i<90;i++){ const m=(lo+hi)/2; if(tTwo(m,df)>0.05) lo=m; else hi=m; } return (lo+hi)/2; }
+  function pairedT(pairs){ const d=pairs.map(([a,b])=>b-a), n=d.length, m=mean(d), s=sdev(d), se=s/Math.sqrt(n), df=n-1, q=tq(df);
+    const p=se>0?tTwo(m/se,df):(m===0?1:0); return {ok:true,kind:'paired',name:'paired t-test',diff:m,lo:m-q*se,hi:m+q*se,p,df,n:[n,n]}; }
+  function welchT(a,b){ const n1=a.length,n2=b.length,m1=mean(a),m2=mean(b),v1=sdev(a)**2,v2=sdev(b)**2,se=Math.sqrt(v1/n1+v2/n2);
+    const df=se>0?(v1/n1+v2/n2)**2/((v1/n1)**2/(n1-1)+(v2/n2)**2/(n2-1)):n1+n2-2; const d=m2-m1, q=tq(df);
+    const p=se>0?tTwo(d/se,df):(d===0?1:0); return {ok:true,kind:'welch',name:'Welch’s t-test',diff:d,lo:d-q*se,hi:d+q*se,p,df,n:[n1,n2]}; }
+  function compareGroups(a,b,canPair){
+    if(canPair){ const mb=new Map(b.units.map(u=>[u.unit,u.v])); const pairs=a.units.filter(u=>mb.has(u.unit)).map(u=>[u.v,mb.get(u.unit)]);
+      if(pairs.length>=2&&pairs.length===a.units.length&&pairs.length===b.units.length) return pairedT(pairs); }
+    if(a.units.length>=2&&b.units.length>=2) return welchT(a.units.map(u=>u.v),b.units.map(u=>u.v));
+    return {ok:false,why:'needs at least 2 per group'};
+  }
+
+  /* ---------- design: the study sheet decides the analysis ---------- */
+  function rolesOf(S,roles){ const F=S.factors; return {C:F.find(f=>roles[f.id]==='compare'),Sub:F.find(f=>roles[f.id]==='subject')||null,sp:F.filter(f=>roles[f.id]==='split'),ig:F.filter(f=>roles[f.id]==='ignore')}; }
+  function pairing(S,roles){
+    const {C,Sub,sp}=rolesOf(S,roles); const cells=new Map();
+    S.samples.forEach(s=>{ const key=sp.map(f=>s.meta[f.id]).join('|'); if(!cells.has(key)) cells.set(key,new Map()); const m=cells.get(key); const u=Sub?s.meta[Sub.id]:s.id; if(!m.has(u)) m.set(u,new Map()); const lv=m.get(u), L=s.meta[C.id]; lv.set(L,(lv.get(L)||0)+1); });
+    let paired=!!Sub, dup=false, n=Infinity;
+    cells.forEach(m=>{ const per=new Map(); m.forEach(lv=>{ if(lv.size<C.levels.length) paired=false; lv.forEach((c,L)=>{ if(c>1) dup=true; per.set(L,(per.get(L)||0)+1); }); }); C.levels.forEach(L=>{ n=Math.min(n,per.get(L)||0); }); });
+    return {paired,dup,n:n===Infinity?0:n};
+  }
+  function describeDesign(S,roles){
+    const {C,Sub,sp,ig}=rolesOf(S,roles), pi=pairing(S,roles), lines=[];
+    const nn=Sub?(Sub.noun||Sub.id.toLowerCase()):'sample', pl=Sub?(Sub.plural||nn+'s'):'samples';
+    lines.push({k:'Compare',v:`${C.id}: ${C.levels.join(' vs ')}. ${C.levels[0]} is the reference.${C.levels.length>2?' Each other level is tested against it, without correction for multiple comparisons.':''}`});
+    if(Sub){
+      lines.push({k:'Pairing',v:pi.paired?`Every ${nn} appears under each ${C.id} level, so samples pair by ${Sub.id}: paired t-test, with a line joining each ${nn}.`:`Each ${nn} appears under only one ${C.id} level, so ${Sub.id} can’t pair them: Welch’s t-test, which doesn’t assume equal spread.`});
+      if(pi.dup) lines.push({k:'Replicates',v:`Some ${pl} have several samples in one group, so those are averaged first and each ${nn} counts once.`});
+    } else {
+      lines.push({k:'Pairing',v:'Nothing pairs the samples, so each sample counts as its own replicate: Welch’s t-test.'});
+      if(ig.length) lines.push({k:'Careful',v:`${ig.map(f=>f.id).join(' and ')} ${ig.length>1?'are':'is'} pooled and no column groups samples by subject, so related samples may count as separate replicates.`});
+    }
+    if(sp[0]) lines.push({k:'Bars',v:`${sp[0].id}: one group of bars per level (${sp[0].levels.join(', ')}).`});
+    if(sp[1]) lines.push({k:'Rows',v:`${sp[1].id}: one row of charts per level (${sp[1].levels.join(', ')}).`});
+    if(Sub) ig.forEach(f=>lines.push({k:'Pooled',v:`${f.id} is ignored, so samples are pooled across it.`}));
+    lines.push({k:'n',v:`${pi.n} ${pi.n===1?nn:pl} per group in each comparison.`});
+    return {lines,paired:pi.paired,test:pi.paired?'Paired t-test':'Welch’s t-test',C,Sub,sp,ig,n:pi.n,noun:nn,plural:pl};
+  }
+  function analyze(st,roles,values,filter){
+    const S=st.study, {C,Sub,sp}=rolesOf(S,roles), sx=sp[0]||null, sr=sp[1]||null;
+    const flt=Object.assign({},filter||{}); delete flt[C.id];
+    const lv=f=>f?f.levels.filter(l=>!(f.id in flt)||flt[f.id]===l):[null];
+    const xL=lv(sx), rL=lv(sr);
+    const okS=s=>{ for(const k in flt){ if(s.meta[k]!==flt[k]) return false; } return true; };
+    const cells=[];
+    rL.forEach(row=>xL.forEach(x=>{
+      const groups=C.levels.map(l=>({level:l,raw:[],units:[]}));
+      S.samples.forEach((s,si)=>{ if(!okS(s)) return; if(sr&&s.meta[sr.id]!==row) return; if(sx&&s.meta[sx.id]!==x) return; const li=C.levels.indexOf(s.meta[C.id]); if(li<0) return; groups[li].raw.push({si,unit:Sub?s.meta[Sub.id]:s.id,v:values[si]}); });
+      groups.forEach(gr=>{ const m=new Map(); gr.raw.forEach(o=>{ if(o.v==null||isNaN(o.v)) return; if(!m.has(o.unit)) m.set(o.unit,[]); m.get(o.unit).push(o.v); });
+        gr.units=[...m].map(([u,vs])=>({unit:u,v:mean(vs),k:vs.length})); gr.missing=gr.raw.filter(o=>o.v==null).length; const vs=gr.units.map(u=>u.v); gr.mean=vs.length?mean(vs):null; gr.sd=sdev(vs); });
+      const tests=[]; for(let j=1;j<groups.length;j++) tests.push(compareGroups(groups[0],groups[j],!!Sub));
+      cells.push({row,x,groups,tests});
+    }));
+    return {C,Sub,sx,sr,levels:C.levels,xL,rL,cells};
+  }
+  function sweep(st,roles){
+    const S=st.study, sw=S.sweep, ro=S.R[S.primary.readout], out=[];
+    for(let k=-4;k<=4;k++){
+      const dl=k*0.1;
+      const v=S.samples.map((s,si)=>readoutValue(ro,countsWithDelta(st,si,sw.gate,sw.cond,dl)));
+      const an=analyze(st,roles,v,S.primary.filter); const cell=an.cells[0];
+      out.push({dl,line:st.gs[0][sw.gate].p.ts[sw.cond]+dl,test:cell?cell.tests[0]:null,cell,an});
+    }
+    return out;
+  }
+  function prismTable(st,roles,values){
+    const an=analyze(st,roles,values), out=[], f=v=>v==null?'':String(+v.toFixed(4));
+    an.rL.forEach(row=>{
+      const cells=an.cells.filter(c=>c.row===row); if(row) out.push(`${an.sr.id}: ${row}`);
+      if(!an.sx){
+        const c=cells[0];
+        if(an.Sub){ const units=[...new Set(c.groups.flatMap(g=>g.units.map(u=>u.unit)))]; out.push([an.Sub.id,...an.levels].join('\t')); units.forEach(u=>out.push([u,...c.groups.map(g=>{ const x=g.units.find(z=>z.unit===u); return x?f(x.v):''; })].join('\t'))); }
+        else { const mx=Math.max(...c.groups.map(g=>g.units.length)); out.push(an.levels.join('\t')); for(let i=0;i<mx;i++) out.push(c.groups.map(g=>g.units[i]?f(g.units[i].v):'').join('\t')); }
+      } else {
+        const reps=an.levels.map((l,li)=>Math.max(1,...cells.map(c=>c.groups[li].units.length)));
+        out.push([an.sx.id,...an.levels.flatMap((l,li)=>Array.from({length:reps[li]},(_,i)=>`${l} ${i+1}`))].join('\t'));
+        cells.forEach(c=>out.push([c.x,...c.groups.flatMap((g,li)=>Array.from({length:reps[li]},(_,i)=>g.units[i]?f(g.units[i].v):''))].join('\t')));
+      }
+      out.push('');
+    });
+    return out.join('\n').trim();
+  }
+  function gatingML(st){
+    const S=st.study, M=262144, L=['<?xml version="1.0" encoding="UTF-8"?>','<gating:Gating-ML','    xmlns:gating="http://www.isac-net.org/std/Gating-ML/v2.0/gating"','    xmlns:data-type="http://www.isac-net.org/std/Gating-ML/v2.0/datatypes">'];
+    const pn=ch=>ch.kind==='scatter'?ch.id:ch.fluor+'-A';
+    const lin=(ch,v)=>ch.kind==='scatter'?Math.round(v*1000):+Math.pow(10,v).toFixed(1);
+    const dim=(name,mn,mx)=>`    <gating:dimension${mn!=null?` gating:min="${mn}"`:''}${mx!=null?` gating:max="${mx}"`:''}><data-type:fcs-dimension data-type:name="${name}"/></gating:dimension>`;
+    S.samples.forEach((s,si)=>{
+      const pre=s.id.replace(/[^A-Za-z0-9]+/g,'_');
+      L.push(`  <!-- ${s.label} -->`);
+      S.gates.forEach(g=>{
+        const p=st.gs[si][g.id].p, id=`${pre}.${g.id}`, par=g.parent?` gating:parent_id="${pre}.${g.parent}"`:'';
+        if(g.type==='ratio'){
+          L.push(`  <gating:PolygonGate gating:id="${id}"${par}>`,dim(pn(S.ch[g.x])),dim(pn(S.ch[g.y])));
+          [[0,0],[M,Math.round(p.t*M)],[M,M],[0,M]].forEach(([a,b])=>L.push(`    <gating:vertex><gating:coordinate data-type:value="${a}"/><gating:coordinate data-type:value="${b}"/></gating:vertex>`));
+          L.push('  </gating:PolygonGate>');
+        } else if(g.type==='rect'){
+          L.push(`  <gating:RectangleGate gating:id="${id}"${par}>`,dim(pn(S.ch[g.x]),lin(S.ch[g.x],p.r[0]),lin(S.ch[g.x],p.r[1])),dim(pn(S.ch[g.y]),lin(S.ch[g.y],p.r[2]),lin(S.ch[g.y],p.r[3])),'  </gating:RectangleGate>');
+        } else {
+          L.push(`  <gating:RectangleGate gating:id="${id}"${par}>`);
+          g.conds.forEach((c,k)=>{ const ch=S.ch[c.ch], v=lin(ch,p.ts[k]); L.push(c.op==='>'?dim(pn(ch),v,null):dim(pn(ch),null,v)); });
+          L.push('  </gating:RectangleGate>');
+        }
+      });
+    });
+    L.push('</gating:Gating-ML>'); return L.join('\n');
+  }
+
+  return {tregStudy,cartStudy,generate,newState,runAuto,recomputeSample,cloneP,parentIdx,filterIdx,vals,ratioVals,kde1,chRange,countsOf,readoutValue,readoutValues,analyze,describeDesign,pairing,sweep,prismTable,gatingML,mean};
+})();
+</script>
+
+<script id="ui">
+(() => {
+'use strict';
+const $=(s,r=document)=>r.querySelector(s);
+const $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmtN=n=>Number(n).toLocaleString('en-GB');
+const fmtPct=v=>v==null||isNaN(v)?'–':v.toFixed(v<1?2:1)+'%';
+const fmtP=p=>p==null?'':(p<0.001?'p < 0.001':'p = '+(p<0.01?p.toFixed(3):p.toFixed(2)));
+function fmtV(v,ro){ if(v==null||isNaN(v)) return '–'; if(ro&&ro.kind==='ratio') return v.toFixed(1); const d=ro&&ro.digits!=null?ro.digits:(Math.abs(v)<1?2:1); return v.toFixed(d); }
+const sgn=v=>(v>=0?'+':'−')+'';
+function fmtD(v,ro){ return (v>=0?'+':'−')+fmtV(Math.abs(v),ro); }
+const unitWord=ro=>ro.kind==='pct'?' points':'';
+const sup=t=>`10<sup>${t.toFixed(2)}</sup>`;
+const lineHTML=(ch,t)=>ch.kind==='scatter'?`${t.toFixed(0)}K`:sup(t);
+function paramsHTML(S,g,p){
+  if(g.type==='ratio') return `FSC-H ÷ FSC-A ≥ ${p.t.toFixed(2)}`;
+  if(g.type==='rect') return `FSC ${p.r[0].toFixed(0)}–${p.r[1].toFixed(0)}K, SSC ${p.r[2].toFixed(0)}–${p.r[3].toFixed(0)}K`;
+  return g.conds.map((c,k)=>`${esc(S.ch[c.ch].label)} ${c.op==='>'?'&gt;':'&lt;'} ${lineHTML(S.ch[c.ch],p.ts[k])}`).join(', ');
+}
+const parentName=g=>g.parent?W.study.G[g.parent].name:'all events';
+const STATUS={ref:'Template, gated by hand',ok:'Placed automatically, confident',check:'Flagged to check',approved:'Approved by you',edited:'Edited by you'};
+const ROLE_NAME={compare:'Compare',subject:'Pair by',split:'Split by',ignore:'Ignore'};
+const statusOf=gs=>gs.status==='ref'?'ref':gs.status==='auto'?(gs.conf==='check'?'check':'ok'):gs.status;
+
+/* ---------- theme colours for canvas ---------- */
+let CC=null;
+function colors(){ if(CC) return CC; const cs=getComputedStyle(document.documentElement), g=n=>cs.getPropertyValue(n).trim();
+  CC={plot:g('--plot'),ink:g('--ink'),ink2:g('--ink-2'),muted:g('--muted'),line:g('--line'),accent:g('--accent'),surface:g('--surface'),check:g('--check'),grp:[g('--g0'),g('--g1'),g('--g2'),g('--g3')]}; return CC; }
+// FlowJo-style pseudocolour: sparse cells blue, dense cells red.
+const LUT=(()=>{ const st=[[0,[40,52,190]],[0.22,[20,150,225]],[0.45,[40,185,95]],[0.7,[245,205,35]],[1,[226,38,28]]], out=[];
+  for(let i=0;i<256;i++){ const t=i/255; let k=0; while(k<st.length-2&&t>st[k+1][0]) k++; const [t0,c0]=st[k],[t1,c1]=st[k+1], f=(t-t0)/(t1-t0); out.push([0,1,2].map(j=>Math.round(c0[j]+(c1[j]-c0[j])*f))); } return out; })();
+const OFF=document.createElement('canvas'), OCTX=OFF.getContext('2d');
+
+/* ---------- workspaces ---------- */
+const DEFS={treg:Eng.tregStudy,cart:Eng.cartStudy};
+const WS={}; let W=null; let TAB='gates';
+const clock=()=>new Date().toTimeString().slice(0,5);
+function log(text){ W.log.push({t:clock(),text}); }
+function countStatus(){ const S=W.study, st=W.st; let ok=0,check=0,mine=0;
+  for(let si=1;si<S.samples.length;si++) S.gates.forEach(g=>{ const s=st.gs[si][g.id]; if(s.status==='auto'){ if(s.conf==='check') check++; else ok++; } else mine++; });
+  return {placed:(S.samples.length-1)*S.gates.length,ok,check,mine}; }
+function nextFlag(si0,gi0){ const S=W.study, st=W.st, N=S.samples.length, G=S.gates.length, start=si0*G+gi0;
+  for(let k=1;k<=N*G;k++){ const j=(start+k+N*G)%(N*G), si=Math.floor(j/G), g=S.gates[j%G]; if(si===0) continue; const s=st.gs[si][g.id]; if(s.status==='auto'&&s.conf==='check') return {si,gid:g.id}; }
+  return null; }
+function makeWS(id){
+  const study=DEFS[id](), data=Eng.generate(study), st=Eng.newState(study,data);
+  const compare=study.factors.find(f=>study.defaultRoles[f.id]==='compare');
+  const w={id,study,st,roles:Object.assign({},study.defaultRoles),log:[],undo:[],sel:null,onlyCheck:false,locked:true,explore:{gid:study.sweep.gate,colorBy:compare.id},chat:[],seeded:false};
+  const prev=W; W=w;
+  const c=countStatus();
+  log(`Template gates from ${esc(study.samples[0].label)}, gated by hand.`);
+  log(`Auto-placed ${c.placed} gates on ${study.samples.length-1} samples: ${c.ok} confident, ${c.check} flagged to check.`);
+  w.sel=nextFlag(0,-1)||{si:1,gid:study.gates[0].id};
+  W=prev; WS[id]=w; return w;
+}
+
+/* ---------- shell ---------- */
+let toastT=null;
+function toast(msg){ const t=$('#toast'); t.textContent=msg; t.hidden=false; clearTimeout(toastT); toastT=setTimeout(()=>{ t.hidden=true; },4200); }
+function updateBadge(){ const c=countStatus(); $('#badge').textContent=c.check?String(c.check):''; }
+function setTab(t){ TAB=t; $$('.tabs [role=tab]').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.tab===t))); $$('main > section').forEach(s=>{ s.hidden=s.id!=='tab-'+t; }); renderTab(); }
+function renderTab(){ ({study:renderStudy,gates:renderGates,results:renderResults,explore:renderExplore,agent:renderAgent})[TAB](); }
+function switchStudy(id,quiet){
+  const fresh=!WS[id]; W=WS[id]||makeWS(id);
+  $$('.switch [role=radio]').forEach(b=>b.setAttribute('aria-checked',String(b.dataset.study===id)));
+  updateBadge(); renderTab();
+  if(!quiet){ const d=Eng.describeDesign(W.study,W.roles); toast(`${fresh?'Built':'Switched to'} the ${W.study.short}: ${W.study.samples.length} samples, ${W.study.gates.length} gates, ${d.test.toLowerCase()}${d.sp.length?', split by '+d.sp.map(f=>f.id).join(' and '):''}.`); }
+}
+
+/* ---------- plotting ---------- */
+function niceTicks(max){ if(!(max>0)) max=1; const raw=max/4, mag=Math.pow(10,Math.floor(Math.log10(raw))), f=raw/mag; const step=(f<=1?1:f<=2?2:f<=2.5?2.5:f<=5?5:10)*mag; const top=Math.ceil(max/step-1e-9)*step; const t=[]; for(let v=0;v<=top+1e-9;v+=step) t.push(+v.toFixed(6)); return {ticks:t,top}; }
+function axisTicks(ch){ return ch.kind==='scatter'?[[0,'0'],[50,'50K'],[100,'100K'],[150,'150K'],[200,'200K'],[250,'250K']]:[[0,'0'],[2,'10²'],[3,'10³'],[4,'10⁴'],[5,'10⁵']]; }
+function plotFrame(cv,cx,cy,o){
+  const dpr=window.devicePixelRatio||1, w=cv.clientWidth||o.w||84, h=cv.clientHeight||o.h||84;
+  if(cv.width!==Math.round(w*dpr)||cv.height!==Math.round(h*dpr)){ cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr); }
+  const ctx=cv.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+  const C=colors(), m=o.mini?{l:0,r:0,t:0,b:0}:{l:50,r:12,t:12,b:40}, pw=w-m.l-m.r, ph=h-m.t-m.b;
+  const [x0,x1]=Eng.chRange(cx), [y0,y1]=Eng.chRange(cy);
+  const map={m,pw,ph,w,h,x0,x1,y0,y1,v2x:v=>m.l+(v-x0)/(x1-x0)*pw,v2y:v=>m.t+ph-(v-y0)/(y1-y0)*ph,x2v:px=>x0+(px-m.l)/pw*(x1-x0),y2v:py=>y0+(m.t+ph-py)/ph*(y1-y0)};
+  ctx.clearRect(0,0,w,h); ctx.fillStyle=C.plot; ctx.fillRect(m.l,m.t,pw,ph);
+  return {ctx,map,C};
+}
+function plotAxes(ctx,map,cx,cy,C){
+  const {m,pw,ph}=map; ctx.strokeStyle=C.line; ctx.lineWidth=1; ctx.strokeRect(m.l+.5,m.t+.5,pw-1,ph-1);
+  ctx.fillStyle=C.muted; ctx.font='10px "IBM Plex Mono", ui-monospace, monospace';
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  axisTicks(cx).forEach(([v,l])=>{ const x=map.v2x(v); if(x<m.l-1||x>m.l+pw+1) return; ctx.fillRect(x,m.t+ph,1,4); ctx.fillText(l,x,m.t+ph+6); });
+  ctx.textAlign='right'; ctx.textBaseline='middle';
+  axisTicks(cy).forEach(([v,l])=>{ const y=map.v2y(v); if(y<m.t-1||y>m.t+ph+1) return; ctx.fillRect(m.l-4,y,4,1); ctx.fillText(l,m.l-6,y); });
+  ctx.fillStyle=C.ink2; ctx.font='11px "IBM Plex Sans", system-ui, sans-serif'; ctx.textAlign='center'; ctx.textBaseline='bottom';
+  const lab=c=>c.kind==='scatter'?c.id:`${c.label} · ${c.fluor}`;
+  ctx.fillText(lab(cx),m.l+pw/2,map.h-2);
+  ctx.save(); ctx.translate(11,m.t+ph/2); ctx.rotate(-Math.PI/2); ctx.textBaseline='middle'; ctx.fillText(lab(cy),0,0); ctx.restore();
+}
+function gateRegion(g,p,map){ // kept region as pixel rect for threshold gates
+  let xa=map.x0,xb=map.x1,ya=map.y0,yb=map.y1;
+  g.conds.forEach((c,k)=>{ const t=p.ts[k]; if(c.ch===g.x){ if(c.op==='>') xa=t; else xb=t; } else if(c.ch===g.y){ if(c.op==='>') ya=t; else yb=t; } });
+  return {X0:map.v2x(xa),X1:map.v2x(xb),Y0:map.v2y(yb),Y1:map.v2y(ya)};
+}
+function drawGateShape(ctx,g,p,map,C,o){
+  const {m,pw,ph}=map; ctx.save(); ctx.beginPath(); ctx.rect(m.l,m.t,pw,ph); ctx.clip();
+  ctx.strokeStyle=o.color||C.ink; ctx.lineWidth=o.mini?1.2:1.7; ctx.setLineDash(o.dash||[]);
+  let anchor=[m.l+6,m.t+6];
+  if(g.type==='rect'){ const X0=map.v2x(p.r[0]),X1=map.v2x(p.r[1]),Y0=map.v2y(p.r[3]),Y1=map.v2y(p.r[2]);
+    if(o.fill){ ctx.globalAlpha=.09; ctx.fillStyle=C.accent; ctx.fillRect(X0,Y0,X1-X0,Y1-Y0); ctx.globalAlpha=1; } ctx.strokeRect(X0,Y0,X1-X0,Y1-Y0); anchor=[X0+4,Y0+4]; }
+  else if(g.type==='ratio'){ const t=p.t, A=[map.v2x(map.x0),map.v2y(t*map.x0)], B=[map.v2x(map.x1),map.v2y(t*map.x1)];
+    if(o.fill){ ctx.beginPath(); ctx.moveTo(A[0],A[1]); ctx.lineTo(B[0],B[1]); ctx.lineTo(map.v2x(map.x1),map.v2y(map.y1)); ctx.lineTo(map.v2x(map.x0),map.v2y(map.y1)); ctx.closePath(); ctx.globalAlpha=.07; ctx.fillStyle=C.accent; ctx.fill(); ctx.globalAlpha=1; }
+    ctx.beginPath(); ctx.moveTo(A[0],A[1]); ctx.lineTo(B[0],B[1]); ctx.stroke(); }
+  else { const R=gateRegion(g,p,map);
+    if(o.fill){ ctx.globalAlpha=.09; ctx.fillStyle=C.accent; ctx.fillRect(R.X0,R.Y0,R.X1-R.X0,R.Y1-R.Y0); ctx.globalAlpha=1; }
+    g.conds.forEach((c,k)=>{ ctx.beginPath(); if(c.ch===g.x){ const x=map.v2x(p.ts[k]); ctx.moveTo(x,m.t); ctx.lineTo(x,m.t+ph); } else { const y=map.v2y(p.ts[k]); ctx.moveTo(m.l,y); ctx.lineTo(m.l+pw,y); } ctx.stroke(); });
+    anchor=[Math.max(m.l,R.X0)+5,Math.max(m.t,R.Y0)+5]; }
+  ctx.restore(); return anchor;
+}
+function drawGatePlot(cv,si,g,p,o){
+  const S=W.study, st=W.st, cx=S.ch[g.x], cy=S.ch[g.y];
+  const {ctx,map,C}=plotFrame(cv,cx,cy,o);
+  const par=Eng.parentIdx(st,si,g), d=st.data[si].ch, X=d[g.x], Y=d[g.y];
+  const bs=o.mini?2:2.5, nx=Math.max(8,Math.floor(map.pw/bs)), ny=Math.max(8,Math.floor(map.ph/bs));
+  const grid=new Uint32Array(nx*ny); let mx=0;
+  const fx=nx/(map.x1-map.x0), fy=ny/(map.y1-map.y0);
+  for(let k=0;k<par.length;k++){ const i=par[k], bx=Math.floor((X[i]-map.x0)*fx), by=Math.floor((Y[i]-map.y0)*fy); if(bx<0||bx>=nx||by<0||by>=ny) continue; const j=(ny-1-by)*nx+bx, c=++grid[j]; if(c>mx) mx=c; }
+  if(OFF.width<nx) OFF.width=nx; if(OFF.height<ny) OFF.height=ny;
+  const img=OCTX.createImageData(nx,ny), lm=Math.log(1+mx)||1;
+  for(let j=0;j<grid.length;j++){ const c=grid[j]; if(!c) continue; const col=LUT[Math.min(255,Math.floor(Math.log(1+c)/lm*255))]; img.data[j*4]=col[0]; img.data[j*4+1]=col[1]; img.data[j*4+2]=col[2]; img.data[j*4+3]=255; }
+  OCTX.clearRect(0,0,OFF.width,OFF.height); OCTX.putImageData(img,0,0);
+  ctx.imageSmoothingEnabled=false; ctx.drawImage(OFF,0,0,nx,ny,map.m.l,map.m.t,map.pw,map.ph);
+  if(o.template) drawGateShape(ctx,g,o.template,map,C,{dash:[4,4],color:C.muted,mini:o.mini});
+  const anchor=drawGateShape(ctx,g,p,map,C,{fill:!o.mini,mini:o.mini,color:o.active?C.accent:C.ink});
+  if(!o.mini){
+    plotAxes(ctx,map,cx,cy,C);
+    const n=o.count!=null?o.count:W.st.idx[si][g.id].length, label=`${g.name}  ${fmtPct(par.length?100*n/par.length:0)}`;
+    ctx.font='500 11px "IBM Plex Mono", ui-monospace, monospace'; const tw=ctx.measureText(label).width;
+    const ax=Math.min(anchor[0],map.m.l+map.pw-tw-12), ay=Math.min(anchor[1],map.m.t+map.ph-22);
+    ctx.globalAlpha=.88; ctx.fillStyle=C.surface; ctx.fillRect(ax,ay,tw+10,18); ctx.globalAlpha=1;
+    ctx.fillStyle=C.ink; ctx.textAlign='left'; ctx.textBaseline='middle'; ctx.fillText(label,ax+5,ay+9.5);
+  } else { ctx.strokeStyle=C.line; ctx.lineWidth=1; ctx.strokeRect(.5,.5,map.w-1,map.h-1); }
+  cv._map=map; return map;
+}
+
+/* ---------- gate review ---------- */
+function renderGates(){
+  const S=W.study, el=$('#tab-gates'), ref=S.samples[0];
+  el.innerHTML=`<div class="gates-layout"><div style="min-width:0">
+    <div class="panel-head"><p class="eyebrow">Will's ask A · automatic gating</p><h2>Gate review</h2>
+    <p class="lede">${esc(ref.label)} was gated by hand. Every other sample starts from those gates, and each gate moves to follow that sample's own cells. Flagged gates need your eyes; approve the rest in one go.</p></div>
+    <div id="g-summary"></div>
+    <div class="legend-row" aria-hidden="true"><span><i class="dot d-ref"></i>Template</span><span><i class="dot d-ok"></i>Confident</span><span><i class="dot d-check"></i>Flagged</span><span><i class="dot d-approved"></i>Approved</span><span><i class="dot d-edited"></i>Edited by you</span><span>Numbers are % of the parent gate</span></div>
+    <div class="gridwrap"><table class="ggrid"><thead><tr><th class="rowh" scope="col">Sample</th>${S.gates.map(g=>`<th scope="col">${esc(g.name)}<small>of ${esc(parentName(g))}</small></th>`).join('')}</tr></thead>
+    <tbody>${S.samples.map((s,si)=>`<tr data-si="${si}"><th class="rowh" scope="row"><b>${esc(s.label)}</b>${s.sub?`<small>${esc(s.sub)}</small>`:''}${si===0?'<em class="tag">template</em>':''}</th>${S.gates.map(g=>`<td><button class="cell" data-si="${si}" data-g="${g.id}"><canvas></canvas><span class="cap"></span></button></td>`).join('')}</tr>`).join('')}</tbody></table></div>
+    <div id="g-steps"></div>
+  </div><aside class="inspector card" id="inspector" aria-label="Selected gate"></aside></div>`;
+  refreshSummary(); refreshSteps(); applyOnlyCheck(); renderInspector(); paintAllCells();
+  el.querySelector('.ggrid').addEventListener('click',e=>{ const b=e.target.closest('.cell'); if(b) selectCell(+b.dataset.si,b.dataset.g,false); });
+}
+let paintJob=0;
+function paintAllCells(){ const cells=$$('#tab-gates .cell'), job=++paintJob; let i=0;
+  (function step(){ if(job!==paintJob) return; const end=Math.min(cells.length,i+28); for(;i<end;i++) paintCell(cells[i]); if(i<cells.length) requestAnimationFrame(step); })(); }
+function paintCell(btn){
+  const si=+btn.dataset.si, gid=btn.dataset.g, S=W.study, st=W.st, g=S.G[gid], gs=st.gs[si][gid];
+  const par=Eng.parentIdx(st,si,g).length, n=st.idx[si][gid].length, pct=par?100*n/par:0, cls=statusOf(gs);
+  btn.className='cell s-'+cls+(W.sel&&W.sel.si===si&&W.sel.gid===gid?' sel':'');
+  btn.querySelector('.cap').innerHTML=`<b>${fmtPct(pct)}</b><i class="dot d-${cls}" aria-hidden="true"></i>`;
+  btn.setAttribute('aria-label',`${S.samples[si].label}, ${g.name}: ${fmtPct(pct)} of ${parentName(g)}. ${STATUS[cls]}.`);
+  drawGatePlot(btn.querySelector('canvas'),si,g,gs.p,{mini:true,w:84,h:84});
+}
+function refreshSummary(){
+  const c=countStatus(), el=$('#g-summary'); if(!el) return;
+  el.innerHTML=`<div class="summary">
+    <div class="stat"><b>${c.placed}</b><span>gates placed automatically</span></div>
+    <div class="stat s-ok"><b>${c.ok}</b><span>confident, waiting for approval</span></div>
+    <div class="stat s-check"><b>${c.check}</b><span>flagged to check</span></div>
+    <div class="stat s-mine"><b>${c.mine}</b><span>approved or edited by you</span></div></div>
+    <div class="toolbar">
+      <button class="btn primary" id="b-next" ${c.check?'':'disabled'}>Next flagged gate</button>
+      <button class="btn" id="b-approve" ${c.ok?'':'disabled'}>Approve ${c.ok} confident gates</button>
+      <button class="btn" id="b-only" aria-pressed="${W.onlyCheck}">Only rows with flags</button>
+      <button class="btn" id="b-export">Export gates</button></div>`;
+  $('#b-next').onclick=()=>{ const s=W.sel||{si:0,gid:W.study.gates[0].id}; const n=nextFlag(s.si,W.study.G[s.gid].i); if(n) selectCell(n.si,n.gid,true); };
+  $('#b-approve').onclick=()=>{ const list=[]; for(let si=1;si<W.study.samples.length;si++) W.study.gates.forEach(g=>{ const s=W.st.gs[si][g.id]; if(s.status==='auto'&&s.conf!=='check') list.push([si,g.id]); });
+    approve(list,`Approved ${list.length} confident gates in one go.`); afterChange('all'); toast(`Approved ${list.length} gates. Flagged ones still wait for you.`); };
+  $('#b-only').onclick=()=>{ W.onlyCheck=!W.onlyCheck; refreshSummary(); applyOnlyCheck(); };
+  $('#b-export').onclick=showExport;
+  updateBadge();
+}
+function applyOnlyCheck(){ $$('#tab-gates tbody tr').forEach(tr=>{ const si=+tr.dataset.si; tr.hidden=W.onlyCheck&&si!==0&&!W.study.gates.some(g=>{ const s=W.st.gs[si][g.id]; return s.status==='auto'&&s.conf==='check'; }); }); }
+function refreshSteps(){
+  const el=$('#g-steps'); if(!el) return;
+  el.innerHTML=`<details class="steps card" open><summary>Steps <span class="count">${W.log.length}</span></summary>
+    <ol>${W.log.slice().reverse().map(e=>`<li><time>${e.t}</time><span>${e.text}</span></li>`).join('')}</ol>
+    <button class="btn small" id="b-undo" ${W.undo.length?'':'disabled'}>Undo last change</button></details>`;
+  $('#b-undo').onclick=undo;
+}
+function selectCell(si,gid,scrollCell){
+  W.sel={si,gid};
+  $$('#tab-gates .cell.sel').forEach(b=>b.classList.remove('sel'));
+  const b=$(`#tab-gates .cell[data-si="${si}"][data-g="${gid}"]`);
+  if(b){ b.classList.add('sel'); const tr=b.closest('tr'); if(tr&&tr.hidden){ W.onlyCheck=false; refreshSummary(); applyOnlyCheck(); } if(scrollCell) b.scrollIntoView({block:'nearest',inline:'nearest'}); }
+  renderInspector();
+  if(window.innerWidth<=1100) $('#inspector').scrollIntoView({block:'start'});
+}
+function renderInspector(focusPlot){
+  const el=$('#inspector'); if(!el||!W.sel) return;
+  const {si,gid}=W.sel, S=W.study, st=W.st, g=S.G[gid], s=S.samples[si], gs=st.gs[si][gid], cls=statusOf(gs);
+  const par=Eng.parentIdx(st,si,g).length, n=st.idx[si][gid].length;
+  const isRef=si===0;
+  el.innerHTML=`<div class="ins-head"><div style="min-width:0"><p class="eyebrow">${esc(s.label)}</p><h3>${esc(g.name)}</h3>
+      <p class="meta">${s.sub?esc(s.sub)+' · ':''}parent: ${esc(parentName(g))}, ${fmtN(par)} cells</p></div>
+      <span class="pill ${cls}"><i class="dot d-${cls}" aria-hidden="true"></i>${STATUS[cls]}</span></div>
+    <div class="plotbox" id="plotbox"><canvas id="bigplot" tabindex="0" aria-label="${esc(g.name)} gate, ${esc(g.x)} against ${esc(g.y)}, for ${esc(s.label)}. Arrow keys move the gate."></canvas></div>
+    <dl class="ins-stats"><div><dt>In gate</dt><dd id="ins-n">${fmtN(n)}</dd></div><div><dt>% of ${esc(parentName(g))}</dt><dd id="ins-pct">${fmtPct(par?100*n/par:0)}</dd></div><div><dt>Position</dt><dd id="ins-pos">${paramsHTML(S,g,gs.p)}</dd></div></dl>
+    <ul class="notes ${cls==='check'?'check':''}">${gs.notes.map(t=>`<li>${esc(t)}</li>`).join('')}${cls==='edited'?'<li>You set this position by hand, so it stays put when the template changes.</li>':''}</ul>
+    ${isRef?'':`<div class="ins-actions"><button class="btn primary" id="i-approve" ${gs.status==='auto'?'':'disabled'}>Approve</button><button class="btn" id="i-reset" ${gs.status==='auto'?'disabled':''}>Back to automatic</button><button class="btn" id="i-template">Use template position</button></div>`}
+    <p class="hint">${isRef?'This is the template. Drag its lines and every sample you haven’t touched is re-placed from it.':'Drag a line to move it. With the plot focused, arrow keys nudge it (Shift for bigger steps). The dashed line is the template.'}</p>
+    <div class="ins-nav"><button class="btn small" id="i-prev">← Previous sample</button><button class="btn small" id="i-next">Next sample →</button></div>`;
+  const cv=$('#bigplot'), box=$('#plotbox'), w=Math.max(260,box.clientWidth||360);
+  cv.style.width=w+'px'; cv.style.height=Math.round(w*0.8)+'px';
+  bindBig(cv,si,g);
+  if(!isRef){
+    $('#i-approve').onclick=()=>{ approve([[si,gid]],`Approved ${esc(g.name)} on ${esc(s.label)}.`); afterChange(si); };
+    $('#i-reset').onclick=()=>{ W.undo.push({items:[snapshot(si,gid)]}); W.st.gs[si][gid].status='auto'; Eng.recomputeSample(W.st,si,gid); log(`Put ${esc(g.name)} on ${esc(s.label)} back to automatic placement.`); afterChange(si); };
+    $('#i-template').onclick=()=>commitEdit(si,gid,Eng.cloneP(W.st.gs[0][gid].p),`Set ${esc(g.name)} on ${esc(s.label)} to the template position.`);
+  }
+  $('#i-prev').onclick=()=>selectCell((si-1+S.samples.length)%S.samples.length,gid,true);
+  $('#i-next').onclick=()=>selectCell((si+1)%S.samples.length,gid,true);
+  if(focusPlot) cv.focus();
+}
+function hitTest(g,p,map,px,py){
+  if(g.type==='thr'){ for(let k=0;k<g.conds.length;k++){ const c=g.conds[k]; if(c.ch===g.x&&Math.abs(map.v2x(p.ts[k])-px)<9) return {kind:'v',k,cursor:'ew-resize'}; if(c.ch===g.y&&Math.abs(map.v2y(p.ts[k])-py)<9) return {kind:'h',k,cursor:'ns-resize'}; } return null; }
+  if(g.type==='ratio'){ const yv=p.t*map.x2v(px); return Math.abs(map.v2y(yv)-py)<11?{kind:'ratio',cursor:'grab'}:null; }
+  const X0=map.v2x(p.r[0]),X1=map.v2x(p.r[1]),Yt=map.v2y(p.r[3]),Yb=map.v2y(p.r[2]);
+  const inY=py>Yt-6&&py<Yb+6, inX=px>X0-6&&px<X1+6;
+  if(inY&&Math.abs(px-X0)<7) return {kind:'e',e:0,cursor:'ew-resize'};
+  if(inY&&Math.abs(px-X1)<7) return {kind:'e',e:1,cursor:'ew-resize'};
+  if(inX&&Math.abs(py-Yb)<7) return {kind:'e',e:2,cursor:'ns-resize'};
+  if(inX&&Math.abs(py-Yt)<7) return {kind:'e',e:3,cursor:'ns-resize'};
+  if(px>X0&&px<X1&&py>Yt&&py<Yb) return {kind:'move',cursor:'move'};
+  return null;
+}
+function bindBig(cv,si,g){
+  const st=W.st, S=W.study, live=Eng.cloneP(st.gs[si][g.id].p), tmpl=si===0?null:st.gs[0][g.id].p;
+  const clampF=(v,ch)=>{ const [a,b]=Eng.chRange(S.ch[ch]); return Math.max(a,Math.min(b,v)); };
+  let drag=null, changed=false, keyT=null;
+  const redraw=()=>{ const par=Eng.parentIdx(st,si,g), n=Eng.filterIdx(st,si,g,live,par).length;
+    drawGatePlot(cv,si,g,live,{count:n,template:tmpl,active:!!drag});
+    $('#ins-n').textContent=fmtN(n); $('#ins-pct').textContent=fmtPct(par.length?100*n/par.length:0); $('#ins-pos').innerHTML=paramsHTML(S,g,live); };
+  redraw();
+  const pos=e=>{ const r=cv.getBoundingClientRect(); return [e.clientX-r.left,e.clientY-r.top]; };
+  cv.onpointerdown=e=>{ const [px,py]=pos(e), h=hitTest(g,live,cv._map,px,py); if(!h) return; drag={h,sx:px,sy:py,p0:Eng.cloneP(live)}; cv.setPointerCapture(e.pointerId); e.preventDefault(); redraw(); };
+  cv.onpointermove=e=>{ const [px,py]=pos(e), map=cv._map;
+    if(!drag){ const h=hitTest(g,live,map,px,py); cv.style.cursor=h?h.cursor:'default'; return; }
+    const h=drag.h; changed=true;
+    if(h.kind==='v') live.ts[h.k]=clampF(map.x2v(px),g.x);
+    else if(h.kind==='h') live.ts[h.k]=clampF(map.y2v(py),g.y);
+    else if(h.kind==='ratio'){ const xv=map.x2v(px), yv=map.y2v(py); if(xv>5) live.t=Math.max(0.3,Math.min(1.15,yv/xv)); }
+    else if(h.kind==='move'){ const dx=map.x2v(px)-map.x2v(drag.sx), dy=map.y2v(py)-map.y2v(drag.sy); live.r=[drag.p0.r[0]+dx,drag.p0.r[1]+dx,drag.p0.r[2]+dy,drag.p0.r[3]+dy]; }
+    else if(h.kind==='e'){ const r=live.r; if(h.e===0) r[0]=Math.min(map.x2v(px),r[1]-5); if(h.e===1) r[1]=Math.max(map.x2v(px),r[0]+5); if(h.e===2) r[2]=Math.min(map.y2v(py),r[3]-5); if(h.e===3) r[3]=Math.max(map.y2v(py),r[2]+5); }
+    redraw(); };
+  cv.onpointerup=cv.onpointercancel=()=>{ if(!drag) return; drag=null; if(changed){ changed=false; commitEdit(si,g.id,live); } else redraw(); };
+  cv.onkeydown=e=>{ const k=e.key; if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(k)) return; e.preventDefault();
+    const m=e.shiftKey?5:1, horiz=k==='ArrowLeft'||k==='ArrowRight', sgn2=(k==='ArrowRight'||k==='ArrowUp')?1:-1;
+    if(g.type==='thr') g.conds.forEach((c,ci)=>{ if((c.ch===g.x&&horiz)||(c.ch===g.y&&!horiz)) live.ts[ci]=clampF(live.ts[ci]+sgn2*0.02*m,c.ch); });
+    else if(g.type==='ratio'){ if(!horiz) live.t=Math.max(0.3,Math.min(1.15,live.t+sgn2*0.01*m)); }
+    else { const d=sgn2*m; if(horiz){ live.r[0]+=d; live.r[1]+=d; } else { live.r[2]+=d; live.r[3]+=d; } }
+    redraw(); clearTimeout(keyT); keyT=setTimeout(()=>commitEdit(si,g.id,live,null,true),650); };
+}
+function snapshot(si,gid){ const s=W.st.gs[si][gid]; return {si,gid,prev:Object.assign({},s,{p:Eng.cloneP(s.p),notes:s.notes.slice()})}; }
+function commitEdit(si,gid,p,msg,focusPlot){
+  const S=W.study, st=W.st, g=S.G[gid], snap=snapshot(si,gid), before=paramsHTML(S,g,snap.prev.p);
+  st.gs[si][gid]=Object.assign({},st.gs[si][gid],{p:Eng.cloneP(p),status:si===0?'ref':'edited',conf:si===0?'ref':'edited'});
+  W.undo.push({items:[snap]});
+  if(si===0){ Eng.runAuto(st); log(msg||`You moved the template ${esc(g.name)} gate on ${esc(S.samples[0].label)}: ${before} → ${paramsHTML(S,g,p)}. It was re-placed on every sample you hadn’t touched.`); afterChange('all',focusPlot); }
+  else { Eng.recomputeSample(st,si,gid); log(msg||`You moved ${esc(g.name)} on ${esc(S.samples[si].label)}: ${before} → ${paramsHTML(S,g,p)}.`); afterChange(si,focusPlot); }
+}
+function approve(list,msg){ if(!list.length) return; W.undo.push({items:list.map(([si,gid])=>snapshot(si,gid))}); list.forEach(([si,gid])=>{ W.st.gs[si][gid].status='approved'; }); log(msg); }
+function undo(){
+  const u=W.undo.pop(); if(!u) return; let all=false; const rows=new Set();
+  u.items.forEach(({si,gid,prev})=>{ W.st.gs[si][gid]=prev; if(si===0) all=true; rows.add(si); });
+  if(all) Eng.runAuto(W.st); else u.items.forEach(({si,gid})=>Eng.recomputeSample(W.st,si,gid));
+  log('Undid the last change.'); afterChange(all||rows.size>1?'all':[...rows][0]);
+}
+function afterChange(scope,focusPlot){
+  updateBadge();
+  if(TAB!=='gates'){ renderTab(); return; }
+  if(scope==='all') paintAllCells(); else $$(`#tab-gates .cell[data-si="${scope}"]`).forEach(paintCell);
+  refreshSummary(); refreshSteps(); renderInspector(focusPlot); applyOnlyCheck();
+}
+function showExport(){
+  const xml=Eng.gatingML(W.st), m=$('#modal');
+  m.innerHTML=`<div class="card" role="dialog" aria-modal="true" aria-labelledby="ex-title"><header style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div><h3 id="ex-title">Gates as GatingML 2.0</h3><p class="meta">Every gate on every sample, in raw channel units. FlowKit and Cytobank read this format; the build writes a FlowJo workspace (.wsp) as well.</p></div><button class="btn small" id="m-close">Close</button></header>
+    <pre class="table" id="m-pre">${esc(xml)}</pre><div class="toolbar"><button class="btn primary" id="m-copy">Copy GatingML</button></div></div>`;
+  m.hidden=false; $('#m-close').onclick=()=>{ m.hidden=true; }; m.onclick=e=>{ if(e.target===m) m.hidden=true; };
+  $('#m-copy').onclick=()=>copyText(xml,$('#m-pre'),'Copied the GatingML.'); $('#m-close').focus();
+}
+function copyText(text,pre,msg){
+  const fallback=()=>{ if(pre){ const r=document.createRange(); r.selectNodeContents(pre); const s=getSelection(); s.removeAllRanges(); s.addRange(r); } toast('Selected the text. Press Ctrl+C or ⌘C to copy it.'); };
+  try{ navigator.clipboard.writeText(text).then(()=>toast(msg||'Copied.'),fallback); }catch(e){ fallback(); }
+}
+
+/* ---------- results ---------- */
+function rowSVG(an,cells,ro){
+  const L=an.levels.length, G=cells.length, bw=40, gi=10, go=34, gw=L*bw+(L-1)*gi, nT=L-1;
+  const left=54, top=20+nT*17, ph=170, bottom=an.sx?48:30;
+  const Wd=left+12+G*gw+(G-1)*go+14, H=top+ph+bottom;
+  let mx=0; cells.forEach(c=>c.groups.forEach(gr=>{ gr.units.forEach(u=>{ mx=Math.max(mx,u.v); }); if(gr.mean!=null) mx=Math.max(mx,gr.mean+(gr.sd||0)); }));
+  const {ticks,top:ymax}=niceTicks(mx*1.04||1), y=v=>top+ph-(v/ymax)*ph;
+  const out=[`<svg viewBox="0 0 ${Wd} ${H}" width="${Wd}" role="img" aria-label="${esc(ro.name)}, ${esc(ro.unit)}, by ${esc(an.C.id)}">`];
+  ticks.forEach(t=>{ out.push(`<line class="grid" x1="${left}" x2="${Wd-8}" y1="${y(t)}" y2="${y(t)}"/><text class="ax" x="${left-6}" y="${y(t)+3}" text-anchor="end">${+t.toFixed(3)}</text>`); });
+  out.push(`<text class="ax" transform="translate(12 ${top+ph/2}) rotate(-90)" text-anchor="middle">${esc(ro.unit)}</text>`);
+  cells.forEach((c,ci)=>{
+    const gx=left+12+ci*(gw+go), cxs=c.groups.map((g,li)=>gx+li*(bw+gi)+bw/2), paired=c.tests[0]&&c.tests[0].kind==='paired';
+    if(paired){ const units=c.groups[0].units.map(u=>u.unit); units.forEach(u=>{ const pts=c.groups.map((g,li)=>{ const z=g.units.find(q=>q.unit===u); return z?`${cxs[li]},${y(z.v)}`:null; }).filter(Boolean); if(pts.length>1) out.push(`<polyline points="${pts.join(' ')}" fill="none" style="stroke:var(--line-2)" stroke-width="1.3"/>`); }); }
+    c.groups.forEach((gr,li)=>{
+      const col=`var(--g${li%4})`, bx=gx+li*(bw+gi);
+      if(gr.mean!=null){
+        out.push(`<rect x="${bx}" y="${y(gr.mean)}" width="${bw}" height="${Math.max(0,y(0)-y(gr.mean))}" style="fill:${col};fill-opacity:.2;stroke:${col}" stroke-width="1.4"/>`);
+        if(gr.units.length>1){ const a=y(gr.mean+gr.sd), b=y(Math.max(0,gr.mean-gr.sd)); out.push(`<path d="M${cxs[li]} ${a}V${b}M${cxs[li]-6} ${a}H${cxs[li]+6}M${cxs[li]-6} ${b}H${cxs[li]+6}" style="stroke:var(--ink-2)" stroke-width="1.2" fill="none"/>`); }
+        gr.units.forEach((u,k)=>{ const off=paired?0:(k-(gr.units.length-1)/2)*7; out.push(`<circle cx="${cxs[li]+off}" cy="${y(u.v)}" r="3.6" style="fill:${col};stroke:var(--surface)" stroke-width="1.2"><title>${esc(u.unit)}: ${fmtV(u.v,ro)}</title></circle>`); });
+      } else out.push(`<text class="ax" x="${cxs[li]}" y="${y(0)-6}" text-anchor="middle">too few</text>`);
+      out.push(`<text class="lbl" x="${cxs[li]}" y="${top+ph+15}" text-anchor="middle">${esc(gr.level)}</text>`);
+    });
+    if(an.sx) out.push(`<text class="lblb" x="${gx+gw/2}" y="${top+ph+36}" text-anchor="middle">${esc(c.x)}</text>`);
+    c.tests.forEach((t,j)=>{ if(!t.ok) return; const by=top-8-j*17, a=cxs[0], b=cxs[j+1];
+      out.push(`<path d="M${a} ${by+5}V${by}H${b}V${by+5}" fill="none" style="stroke:var(--ink-2)" stroke-width="1"/><text class="ax" x="${(a+b)/2}" y="${by-3}" text-anchor="middle">${fmtP(t.p)}</text>`); });
+  });
+  out.push(`<line x1="${left}" x2="${Wd-8}" y1="${y(0)}" y2="${y(0)}" style="stroke:var(--ink-2)" stroke-width="1"/></svg>`);
+  return out.join('');
+}
+function testLines(an,cells,ro,d){
+  const items=[];
+  cells.forEach(c=>c.tests.forEach((t,j)=>{
+    const where=[c.row,c.x].filter(Boolean).join(', '), a=c.groups[0], b=c.groups[j+1];
+    if(!t.ok){ items.push(`<li>${where?`<b>${esc(where)}</b> · `:''}${esc(b.level)} vs ${esc(a.level)}: not tested, ${t.why}.</li>`); return; }
+    items.push(`<li>${where?`<b>${esc(where)}</b> · `:''}${esc(b.level)} ${fmtV(b.mean,ro)} vs ${esc(a.level)} ${fmtV(a.mean,ro)}. Difference <b>${fmtD(t.diff,ro)}${unitWord(ro)}</b> (95% CI ${fmtV(t.lo,ro)} to ${fmtV(t.hi,ro)}), ${t.name}, ${fmtP(t.p)}, n = ${t.n[0]===t.n[1]?t.n[0]:t.n.join(' vs ')} ${t.n[0]===1?d.noun:d.plural}.</li>`);
+  }));
+  return `<ul class="statlist">${items.join('')}</ul>`;
+}
+function chartsHTML(an,ro,d){
+  return an.rL.map(row=>{ const cells=an.cells.filter(c=>c.row===row); return `${row?`<p class="rowtitle">${esc(an.sr.id)}: ${esc(row)}</p>`:''}<div class="chart">${rowSVG(an,cells,ro)}</div>${testLines(an,cells,ro,d)}`; }).join('');
+}
+function fmtLine(t){ return sup(t).replace('<sup>'+t.toFixed(2),'<sup>'+t.toFixed(1)); }
+function robustSVG(steps,ro){
+  const Wd=620,H=230,l=58,r=14,t=16,b=44, pw=Wd-l-r, ph=H-t-b, ok=steps.filter(s=>s.test&&s.test.ok);
+  let lo=0,hi=0; ok.forEach(s=>{ lo=Math.min(lo,s.test.lo); hi=Math.max(hi,s.test.hi); }); const pad=(hi-lo)*0.08||1; lo-=pad; hi+=pad;
+  const x=i=>l+(i+.5)*pw/steps.length, y=v=>t+ph-(v-lo)/(hi-lo)*ph;
+  const out=[`<svg viewBox="0 0 ${Wd} ${H}" width="${Wd}" role="img" aria-label="Difference at each line position">`];
+  out.push(`<rect x="${x(4)-pw/steps.length/2}" y="${t}" width="${pw/steps.length}" height="${ph}" style="fill:var(--accent-soft)"/>`);
+  niceTicksRange(lo,hi).forEach(v=>out.push(`<line class="grid" x1="${l}" x2="${Wd-r}" y1="${y(v)}" y2="${y(v)}"/><text class="ax" x="${l-6}" y="${y(v)+3}" text-anchor="end">${+v.toFixed(2)}</text>`));
+  out.push(`<line class="zero" x1="${l}" x2="${Wd-r}" y1="${y(0)}" y2="${y(0)}"/>`);
+  steps.forEach((s,i)=>{
+    out.push(`<text class="ax" x="${x(i)}" y="${t+ph+16}" text-anchor="middle">10<tspan dy="-4" font-size="8">${s.line.toFixed(1)}</tspan></text>`);
+    if(!s.test||!s.test.ok) return;
+    const ex=s.test.lo>0||s.test.hi<0;
+    out.push(`<line x1="${x(i)}" x2="${x(i)}" y1="${y(s.test.lo)}" y2="${y(s.test.hi)}" style="stroke:${ex?'var(--accent)':'var(--muted)'}" stroke-width="2"/>`);
+    out.push(`<circle cx="${x(i)}" cy="${y(s.test.diff)}" r="5" style="fill:${ex?'var(--accent)':'var(--surface)'};stroke:${ex?'var(--accent)':'var(--muted)'}" stroke-width="2"><title>Line 10^${s.line.toFixed(2)}: ${fmtD(s.test.diff,ro)} (95% CI ${fmtV(s.test.lo,ro)} to ${fmtV(s.test.hi,ro)})</title></circle>`);
+  });
+  out.push(`<text class="ax" x="${x(4)}" y="${t+ph+34}" text-anchor="middle">current line</text>`);
+  out.push(`<text class="ax" transform="translate(12 ${t+ph/2}) rotate(-90)" text-anchor="middle">difference${ro.kind==='pct'?', points':''}</text></svg>`);
+  return out.join('');
+}
+function niceTicksRange(lo,hi){ const raw=(hi-lo)/4, mag=Math.pow(10,Math.floor(Math.log10(raw||1))), f=raw/mag, step=(f<=1?1:f<=2?2:f<=5?5:10)*mag, o=[]; for(let v=Math.ceil(lo/step)*step;v<=hi+1e-9;v+=step) o.push(+v.toFixed(6)); return o; }
+function holdsText(steps,ro,chLabel){
+  const c=steps[4]; if(!c.test||!c.test.ok) return 'The current line gives too little data to test.';
+  const ex=s=>s.test&&s.test.ok&&(s.test.lo>0||s.test.hi<0)&&Math.sign(s.test.diff)===Math.sign(c.test.diff);
+  if(!ex(c)) return `At the current line the 95% interval includes zero, so the difference isn’t clear even here.`;
+  let a=4,b=4; while(a>0&&ex(steps[a-1])) a--; while(b<steps.length-1&&ex(steps[b+1])) b++;
+  const whole=a===0&&b===steps.length-1;
+  return `The difference holds, with the 95% interval clear of zero, for any ${esc(chLabel)} line from <b>${fmtLine(steps[a].line)}</b> to <b>${fmtLine(steps[b].line)}</b>${whole?', the whole range tested':''}.`;
+}
+function renderResults(){
+  const S=W.study, st=W.st, d=Eng.describeDesign(S,W.roles), c=countStatus(), el=$('#tab-results');
+  const sw=S.sweep, swCh=S.ch[S.G[sw.gate].conds[sw.cond].ch], pro=S.R[S.primary.readout];
+  const steps=Eng.sweep(st,W.roles), filt=Object.entries(S.primary.filter).filter(([k])=>k!==d.C.id).map(([,v])=>v).join(', ');
+  const lineNow=st.gs[0][sw.gate].p.ts[sw.cond];
+  const cards=S.readouts.map(ro=>{ const v=Eng.readoutValues(st,ro), an=Eng.analyze(st,W.roles,v), tsv=Eng.prismTable(st,W.roles,v);
+    return `<section class="card"><header><div><h3>${esc(ro.name)}</h3><p class="unit">${esc(ro.unit)}</p></div><button class="btn small" data-copy="${ro.id}">Copy Prism table</button></header>
+      ${chartsHTML(an,ro,d)}
+      <details class="prism"><summary>Prism table (${an.sx?'grouped':'column'} layout, tab-separated)</summary><pre class="table" id="tsv-${ro.id}">${esc(tsv)}</pre></details></section>`; }).join('');
+  el.innerHTML=`<div class="panel-head"><p class="eyebrow">Will's ask B · charts without the export step</p><h2>Results</h2>
+    <p class="lede">Every number below is counted from the current gates. Move a gate in Gate review and these redraw. The study sheet decided the layout and the test; change it in the Study sheet tab.</p></div>
+    <div class="chiprow"><span class="chip">Compare <b>${esc(d.C.id)}</b></span>${d.Sub?`<span class="chip">${d.paired?'Paired by':'Grouped by'} <b>${esc(d.Sub.id)}</b></span>`:''}${d.sp.map(f=>`<span class="chip">Split by <b>${esc(f.id)}</b></span>`).join('')}<span class="chip"><b>${d.test}</b></span><span class="chip muted">${d.n} ${d.n===1?d.noun:d.plural} per group</span><button class="btn small" id="r-sheet">Change in study sheet</button></div>
+    ${c.check?`<div class="banner"><span>${c.check} gate${c.check>1?'s are':' is'} still flagged in Gate review. These numbers use them as placed.</span><button class="btn small" id="r-review">Review flagged gates</button></div>`:''}
+    <div class="res-grid">
+      <section class="card robust"><header><div><p class="eyebrow">The judgement call</p><h3>Does the result survive moving the ${esc(swCh.label)} line?</h3></div><span class="pill ${W.locked?'ok':'check'}">${W.locked?'Line locked':'Line unlocked'}</span></header>
+        <p class="lede">${esc(pro.name)} (${esc(pro.unit)}), ${esc(d.C.levels[1])} minus ${esc(d.C.levels[0])}${filt?` in ${esc(filt)}`:''}. Each point is that difference, with its 95% interval, if every sample's ${esc(swCh.label)} line moved by the same amount. Effect sizes, not p-values, so the strip can't be used to shop for significance.</p>
+        <div class="chart">${robustSVG(steps,pro)}</div>
+        <p class="verdict">${holdsText(steps,pro,swCh.label)}</p>
+        <div class="lockrow">${W.locked?`<span>Locked at ${fmtLine(lineNow)} on ${esc(S.samples[0].label)}, set before results were opened. Each sample keeps its own auto-placed line; the strip shifts them all together.</span><button class="btn small" id="r-unlock">Unlock to move the line</button>`
+          :`<span class="warn">Unlocked. A move now is recorded as made after viewing results.</span><div class="stepbtns">${steps.map(s=>`<button class="btn small" data-dl="${s.dl}" ${s.dl===0?'disabled':''}>${s.dl>0?'+':''}${s.dl.toFixed(1)}</button>`).join('')}</div><button class="btn small" id="r-lock">Lock</button>`}</div>
+      </section>
+      ${cards}
+    </div>`;
+  $('#r-sheet').onclick=()=>setTab('study');
+  if($('#r-review')) $('#r-review').onclick=()=>{ const n=nextFlag(0,-1); if(n) W.sel=n; setTab('gates'); };
+  if($('#r-unlock')) $('#r-unlock').onclick=()=>{ W.locked=false; log(`Unlocked the ${esc(swCh.label)} line after viewing results.`); renderResults(); };
+  if($('#r-lock')) $('#r-lock').onclick=()=>{ W.locked=true; log(`Locked the ${esc(swCh.label)} line at ${fmtLine(W.st.gs[0][sw.gate].p.ts[sw.cond])}.`); renderResults(); };
+  $$('[data-dl]',el).forEach(b=>b.onclick=()=>moveSweep(+b.dataset.dl));
+  $$('[data-copy]',el).forEach(b=>b.onclick=()=>{ const pre=$('#tsv-'+b.dataset.copy); copyText(pre.textContent,pre,'Copied. Paste it into a Prism data table.'); });
+}
+function moveSweep(dl){
+  const S=W.study, st=W.st, sw=S.sweep, ch=S.ch[S.G[sw.gate].conds[sw.cond].ch], items=[];
+  S.samples.forEach((s,si)=>{ items.push(snapshot(si,sw.gate)); const cur=st.gs[si][sw.gate], p=Eng.cloneP(cur.p); p.ts[sw.cond]+=dl; st.gs[si][sw.gate]=Object.assign({},cur,{p,status:si===0?'ref':'edited',conf:si===0?'ref':'edited'}); });
+  W.undo.push({items}); Eng.runAuto(st);
+  log(`Moved the ${esc(ch.label)} line by ${dl>0?'+':'−'}${Math.abs(dl).toFixed(1)} decades on all ${S.samples.length} samples, after viewing results.`);
+  updateBadge(); renderResults(); toast(`Moved the ${ch.label} line on every sample. It's in Steps, and Undo reverses it.`);
+}
+
+/* ---------- explore ---------- */
+function renderExplore(){
+  const S=W.study, st=W.st, el=$('#tab-explore'), g=S.G[W.explore.gid];
+  const colorF=S.factors.filter(f=>f.levels.length>=2&&f.levels.length<=4);
+  if(!colorF.find(f=>f.id===W.explore.colorBy)) W.explore.colorBy=colorF[0].id;
+  const cf=S.factorMap[W.explore.colorBy];
+  const tree=S.gates.map(gg=>{ const pcts=S.samples.map((s,si)=>{ const p=Eng.parentIdx(st,si,gg).length; return p?100*st.idx[si][gg.id].length/p:0; }); const fl=S.samples.filter((s,si)=>si>0&&st.gs[si][gg.id].status==='auto'&&st.gs[si][gg.id].conf==='check').length;
+    return `<li><button style="--d:${gg.depth}" data-g="${gg.id}" aria-current="${gg.id===g.id}"><span><b>${esc(gg.name)}</b><small>${fmtPct(Eng.mean(pcts))} of ${esc(parentName(gg))}, mean</small></span>${fl?`<i class="flagn">${fl}</i>`:''}</button></li>`; }).join('');
+  el.innerHTML=`<div class="panel-head"><p class="eyebrow">Will's ask C · see the raw data</p><h2>Explore</h2><p class="lede">Pick a gate in the tree. Left: every sample's cells at that step, overlaid. Right: one row per sample, so drift between samples and the line each one got are visible at a glance.</p></div>
+  <div class="ex-layout"><nav class="card tree" aria-label="Gating tree"><h3>Gating tree</h3><ul>${tree}</ul></nav>
+  <div style="min-width:0"><div class="ex-head"><h3>${esc(g.name)} <span class="unit">on ${esc(g.x)} × ${esc(g.y)}, from ${esc(parentName(g))}</span></h3>
+    <label for="ex-color">Colour by <select id="ex-color">${colorF.map(f=>`<option value="${f.id}" ${f.id===cf.id?'selected':''}>${esc(f.id)}</option>`).join('')}</select></label></div>
+  <div class="ex-grid"><figure class="card"><figcaption>All ${S.samples.length} samples overlaid. Dashed: the template gate.</figcaption><canvas id="ex-overlay"></canvas>
+    <div class="legend">${cf.levels.map((l,i)=>`<span><i style="background:var(--g${i})"></i>${esc(l)}</span>`).join('')}</div></figure>
+  <figure class="card"><figcaption>${esc(ridgeLabel(g))} in each sample. Dark tick: where that sample's gate landed. Click a row to review it.</figcaption><div class="ridge">${ridgeSVG(g,cf)}</div></figure></div></div></div>`;
+  $$('.tree [data-g]',el).forEach(b=>b.onclick=()=>{ W.explore.gid=b.dataset.g; renderExplore(); });
+  $('#ex-color').onchange=e=>{ W.explore.colorBy=e.target.value; renderExplore(); };
+  $$('.rrow',el).forEach(r=>{ const go=()=>{ W.sel={si:+r.dataset.si,gid:g.id}; setTab('gates'); }; r.onclick=go; r.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); go(); } }; });
+  const cv=$('#ex-overlay'), w=Math.max(260,cv.parentElement.clientWidth-36); cv.style.width=w+'px'; cv.style.height=Math.round(Math.min(460,w*0.8))+'px';
+  drawOverlay(cv,g,cf);
+}
+function ridgeLabel(g){ const S=W.study; if(g.type==='ratio') return 'FSC-H ÷ FSC-A'; if(g.type==='rect') return g.x; const c=S.ch[g.conds[0].ch]; return c.label; }
+function drawOverlay(cv,g,cf){
+  const S=W.study, st=W.st, {ctx,map,C}=plotFrame(cv,S.ch[g.x],S.ch[g.y],{});
+  ctx.save(); ctx.beginPath(); ctx.rect(map.m.l,map.m.t,map.pw,map.ph); ctx.clip(); ctx.globalAlpha=.34;
+  S.samples.forEach((s,si)=>{ const par=Eng.parentIdx(st,si,g), d=st.data[si].ch, X=d[g.x], Y=d[g.y], step=Math.max(1,Math.floor(par.length/1400));
+    ctx.fillStyle=C.grp[cf.levels.indexOf(s.meta[cf.id])%4];
+    for(let k=0;k<par.length;k+=step){ const i=par[k]; ctx.fillRect(map.v2x(X[i])-.8,map.v2y(Y[i])-.8,1.7,1.7); } });
+  ctx.restore();
+  drawGateShape(ctx,g,st.gs[0][g.id].p,map,C,{dash:[5,4],color:C.ink});
+  plotAxes(ctx,map,S.ch[g.x],S.ch[g.y],C);
+}
+function ridgeSVG(g,cf){
+  const S=W.study, st=W.st; let range,getV,marks;
+  if(g.type==='ratio'){ range=[0.3,1.15]; getV=(si,par)=>Eng.ratioVals(st,si,g,par); marks=p=>[p.t]; }
+  else if(g.type==='rect'){ range=Eng.chRange(S.ch[g.x]); getV=(si,par)=>Eng.vals(st,si,g.x,par); marks=p=>[p.r[0],p.r[1]]; }
+  else { const c=S.ch[g.conds[0].ch]; range=Eng.chRange(c); getV=(si,par)=>Eng.vals(st,si,c.id,par); marks=p=>[p.ts[0]]; }
+  const rowH=24, peak=30, left=112, right=12, top=8, Wd=620, pw=Wd-left-right, N=S.samples.length, H=top+peak+N*rowH+30;
+  const xs=v=>left+(v-range[0])/(range[1]-range[0])*pw, out=[`<svg viewBox="0 0 ${Wd} ${H}" role="group" aria-label="${esc(ridgeLabel(g))} per sample">`];
+  marks(st.gs[0][g.id].p).forEach(v=>out.push(`<line x1="${xs(v)}" x2="${xs(v)}" y1="${top}" y2="${top+peak+N*rowH}" style="stroke:var(--accent)" stroke-dasharray="4 4" stroke-width="1.2"/>`));
+  S.samples.forEach((s,si)=>{
+    const par=Eng.parentIdx(st,si,g), base=top+peak+si*rowH, col=`var(--g${cf.levels.indexOf(s.meta[cf.id])%4})`, gs=st.gs[si][g.id], flag=gs.status==='auto'&&gs.conf==='check';
+    let path='';
+    if(par.length>5){ const K=Eng.kde1(getV(si,par),range[0],range[1],120); let mx=0; for(let b=0;b<K.nb;b++) mx=Math.max(mx,K.s[b]);
+      path=`M${left} ${base}`; for(let b=0;b<K.nb;b++) path+=`L${xs(K.x(b)).toFixed(1)} ${(base-(mx?K.s[b]/mx:0)*peak).toFixed(1)}`; path+=`L${left+pw} ${base}Z`; }
+    out.push(`<g class="rrow" data-si="${si}" tabindex="0" role="button" aria-label="${esc(s.label)}${flag?', flagged':''}. Review this gate."><rect class="hit" x="0" y="${base-rowH}" width="${Wd}" height="${rowH}" fill="transparent"/>`);
+    if(path) out.push(`<path d="${path}" style="fill:${col};fill-opacity:.26;stroke:${col}" stroke-width="1.2"/>`);
+    marks(gs.p).forEach(v=>out.push(`<line x1="${xs(v)}" x2="${xs(v)}" y1="${base}" y2="${base-peak*.85}" style="stroke:var(--ink)" stroke-width="2"/>`));
+    out.push(`<text class="lbl" x="${left-10}" y="${base-5}" text-anchor="end">${esc(s.label)}</text>`);
+    if(flag) out.push(`<rect x="${left-7}" y="${base-12}" width="6" height="6" transform="rotate(45 ${left-4} ${base-9})" style="fill:var(--check)"/>`);
+    out.push('</g>');
+  });
+  const ticks=g.type==='ratio'?[[0.4,'0.4'],[0.6,'0.6'],[0.8,'0.8'],[1.0,'1.0']]:axisTicks(g.type==='rect'?S.ch[g.x]:S.ch[g.conds[0].ch]);
+  const yb=top+peak+N*rowH+4; out.push(`<line x1="${left}" x2="${left+pw}" y1="${yb}" y2="${yb}" style="stroke:var(--line-2)"/>`);
+  ticks.forEach(([v,l])=>out.push(`<text class="ax" x="${xs(v)}" y="${yb+14}" text-anchor="middle">${l}</text>`));
+  out.push('</svg>'); return out.join('');
+}
+
+/* ---------- agent ---------- */
+const TOOLS=[['list_samples','()','The study sheet: every sample and what it is.'],['get_gate_tree','()','Gates, parents, channels and template positions.'],['review_gates','(status?)','Gates the auto-placer flagged, with its reason for each.'],['set_gate','(sample, gate, line)','Move a gate line on one sample. Logged as a step you can undo.'],['get_stats','(readout, filters?)','One value per sample, counted from the current gates.'],['compare_groups','(readout, filters?)','The comparison the study sheet implies, with a 95% interval.'],['check_robustness','(readout)','The effect at every position of the judgement-call line.'],['set_roles','(roles)','Change what is compared, paired or split.'],['export_prism','(readout)','A table that pastes straight into Prism.']];
+function matchReadout(q){ const S=W.study; let best=null,bs=0; S.readouts.forEach(ro=>{ const s=ro.keys.filter(k=>q.includes(k)).length; if(s>bs){ bs=s; best=ro; } }); return best; }
+function matchFilters(q){ const S=W.study, f={}; S.factors.forEach(F=>{ if(F.levels.length>4) return; F.levels.forEach(l=>{ const L=l.toLowerCase(); if(q.includes(L)||(L==='tumour'&&q.includes('tumor'))) f[F.id]=l; }); }); return f; }
+function callHTML(fn,args){ return `<div class="call"><span class="fn">${fn}</span><span>${esc(JSON.stringify(args))}</span></div>`; }
+function agentAsk(text){
+  const S=W.study, st=W.st, q=text.toLowerCase(), m={q:text,parts:[]}; const say=h=>m.parts.push(`<p class="reply">${h}</p>`), call=(f,a)=>m.parts.push(callHTML(f,a)), add=h=>m.parts.push(h);
+  const d=Eng.describeDesign(S,W.roles);
+  try{
+    const setM=q.match(/(?:to|at)\s*(?:10\^)?(-?\d+(?:\.\d+)?)\s*$/);
+    if(/\b(set|move|put)\b/.test(q)&&setM){
+      const s=S.samples.find(x=>q.includes(x.id.toLowerCase())||q.includes(x.label.toLowerCase())); const g=S.gates.slice().sort((a,b)=>b.name.length-a.name.length).find(x=>q.includes(x.name.toLowerCase()));
+      const v=parseFloat(setM[1]);
+      if(!s||!g){ say('Name a sample and a gate, for example “Set the CD3+ line on D02 Treated to 2.0”.'); }
+      else if(g.type!=='thr'){ say(`${esc(g.name)} isn’t a single line. Drag it in Gate review instead.`); }
+      else { const si=S.samples.indexOf(s); call('set_gate',{sample:s.id,gate:g.name,line:v}); const p=Eng.cloneP(st.gs[si][g.id].p); p.ts[0]=v;
+        commitEdit(si,g.id,p,`Agent moved ${esc(g.name)} on ${esc(s.label)} to ${lineHTML(S.ch[g.conds[0].ch],v)}, on your request.`);
+        const par=Eng.parentIdx(st,si,g).length, n=st.idx[si][g.id].length;
+        say(`Moved the ${esc(S.ch[g.conds[0].ch].label)} line on ${esc(s.label)} to ${sup(v)}. ${esc(g.name)} is now ${fmtPct(par?100*n/par:0)} of ${esc(parentName(g))}, and everything below it was recounted. It’s in Steps, so Undo in Gate review reverses it.`); }
+    }
+    else if(/\b(check|flag|flagged|review|unsure|confiden|wrong)/.test(q)){
+      call('review_gates',{status:'flagged'}); const rows=[];
+      for(let si=1;si<S.samples.length;si++) S.gates.forEach(g=>{ const s=st.gs[si][g.id]; if(s.status==='auto'&&s.conf==='check') rows.push({si,g,why:s.notes[0]}); });
+      if(!rows.length) say('Nothing is flagged right now. Every automatic gate was placed with a clear separation, or you have already handled it.');
+      else { say(`${rows.length} gate${rows.length>1?'s':''} need${rows.length>1?'':'s'} a look. The rest were placed with clear separation.`);
+        add(`<div class="tablewrap"><table class="mini-table"><thead><tr><th>Sample</th><th>Gate</th><th>Why</th><th></th></tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(S.samples[r.si].label)}</td><td>${esc(r.g.name)}</td><td>${esc(r.why)}</td><td><button class="btn small" data-open="${r.si}:${r.g.id}">Open</button></td></tr>`).join('')}</tbody></table></div>`); }
+    }
+    else if(/prism|export|paste/.test(q)){
+      const ro=matchReadout(q)||S.R[S.primary.readout]; call('export_prism',{readout:ro.id}); const tsv=Eng.prismTable(st,W.roles,Eng.readoutValues(st,ro));
+      say(`Here is ${esc(ro.name)} (${esc(ro.unit)}) laid out for Prism, ${d.sp.length?'as a grouped table':'as a column table'}${d.paired?' with one row per '+esc(d.noun):''}.`);
+      add(`<pre class="table">${esc(tsv)}</pre><div><button class="btn small" data-copytext="${esc(tsv)}">Copy table</button></div>`);
+    }
+    else if(/hold|robust|sensitiv|if i move|move the/.test(q)){
+      const ro=S.R[S.primary.readout], sw=S.sweep, ch=S.ch[S.G[sw.gate].conds[sw.cond].ch]; call('check_robustness',{readout:ro.id,line:ch.label});
+      const steps=Eng.sweep(st,W.roles); add(`<div class="chart">${robustSVG(steps,ro)}</div>`); say(holdsText(steps,ro,ch.label)+' The Results tab has the same strip with the line lock.');
+    }
+    else if(S.id==='cart'&&/tissue/.test(q)&&/(within|across|between|compare)/.test(q)){
+      const roles={Mouse:'subject',Group:'split',Tissue:'compare',Day:'split'}; call('set_roles',roles); W.roles=roles; log('Agent set the study sheet to compare tissues within each mouse.');
+      const ro=matchReadout(q)||S.R[S.primary.readout], an=Eng.analyze(st,W.roles,Eng.readoutValues(st,ro)), d2=Eng.describeDesign(S,W.roles); call('compare_groups',{readout:ro.id});
+      say(`Tissue is now the comparison, and each mouse gave all three tissues, so the tests are paired within mouse. Groups and days are split. The Results tab has switched too.`);
+      add(chartsHTML(an,ro,d2));
+    }
+    else { const ro=matchReadout(q);
+      if(ro||/\bvs\b|versus|compare|differ|treated|control|mock/.test(q)){
+        const r=ro||S.R[S.primary.readout], f=matchFilters(q); delete f[d.C.id]; call('compare_groups',Object.keys(f).length?{readout:r.id,filters:f}:{readout:r.id});
+        const an=Eng.analyze(st,W.roles,Eng.readoutValues(st,r),f), c0=an.cells[0], t=c0&&c0.tests[0];
+        if(t&&t.ok&&an.cells.length===1){ const a=c0.groups[0], b=c0.groups[1]; say(`${esc(r.name)}: ${fmtV(a.mean,r)} in ${esc(a.level)} and ${fmtV(b.mean,r)} in ${esc(b.level)} (${esc(r.unit)}). Difference ${fmtD(t.diff,r)}${unitWord(r)}, 95% CI ${fmtV(t.lo,r)} to ${fmtV(t.hi,r)}, ${t.name}, ${fmtP(t.p)}, n = ${t.n[0]} ${t.n[0]===1?d.noun:d.plural} per group.`); }
+        else say(`${esc(r.name)} (${esc(r.unit)}), ${esc(d.C.levels.join(' vs '))}, using the ${d.test.toLowerCase()} the study sheet implies.`);
+        add(chartsHTML(an,r,d));
+      } else say('I can’t match that to a tool yet. Try one of the suggestions below.');
+    }
+  }catch(err){ say('That call failed: '+esc(err.message)); }
+  W.chat.push(m);
+}
+function renderAgent(){
+  const S=W.study, el=$('#tab-agent');
+  if(!W.seeded){ W.seeded=true; agentAsk(S.chips[1]); }
+  el.innerHTML=`<div class="panel-head"><p class="eyebrow">An endpoint for agents</p><h2>Agent</h2><p class="lede">The same gates, numbers and tests, exposed as tools an AI agent can call. Ask in plain English and see which tool runs.</p></div>
+  <div class="ag-layout"><aside class="card"><h3>Tools this workspace exposes</h3><p class="meta">In the build these are MCP tools that Claude calls. Each runs against the same state you see in the other tabs.</p><ul class="tools">${TOOLS.map(([n,a,dsc])=>`<li><code>${n}${a}</code><span>${dsc}</span></li>`).join('')}</ul></aside>
+  <div style="min-width:0"><p class="ag-note">In this prototype a keyword matcher stands in for Claude, so it works offline. The tool calls and their results are real.</p>
+    <div class="chat" id="chat">${W.chat.map(m=>`<div class="msg-q">${esc(m.q)}</div><div class="msg-a">${m.parts.join('')}</div>`).join('')}</div>
+    <form class="ag-form" id="ag-form"><label for="ag-in" class="sr">Ask the agent</label><input id="ag-in" autocomplete="off" placeholder="Ask about this study, e.g. ${esc(S.chips[2])}"><button class="btn primary" type="submit">Ask</button></form>
+    <div class="prompts">${S.chips.map(c=>`<button class="btn small" data-chip="${esc(c)}">${esc(c)}</button>`).join('')}</div></div></div>`;
+  const run=t=>{ if(!t.trim()) return; agentAsk(t.trim()); renderAgent(); const ch=$('#chat'); const last=ch.lastElementChild; if(last) last.previousElementSibling.scrollIntoView({block:'start',behavior:'smooth'}); };
+  $('#ag-form').onsubmit=e=>{ e.preventDefault(); run($('#ag-in').value); };
+  $$('[data-chip]',el).forEach(b=>b.onclick=()=>run(b.dataset.chip));
+  $$('[data-open]',el).forEach(b=>b.onclick=()=>{ const [si,gid]=b.dataset.open.split(':'); W.sel={si:+si,gid}; setTab('gates'); });
+  $$('[data-copytext]',el).forEach(b=>b.onclick=()=>copyText(b.dataset.copytext,b.parentElement.previousElementSibling,'Copied. Paste it into a Prism data table.'));
+}
+
+/* ---------- study sheet ---------- */
+function renderStudy(){
+  const S=W.study, el=$('#tab-study'), d=Eng.describeDesign(S,W.roles), R=W.roles;
+  const used=ch=>S.gates.filter(g=>(g.type==='thr'&&g.conds.some(c=>c.ch===ch))).map(g=>g.name);
+  el.innerHTML=`<div class="panel-head"><p class="eyebrow">The sheet that builds the workspace</p><h2>${esc(S.name)}</h2><p class="lede">${esc(S.tagline)}. The sheet says what each sample is. The other tabs are built from it: which gates exist, what gets compared, how samples pair, and which test runs. Switch studies at the top to see the same app rebuild itself.</p></div>
+  <div class="st-layout"><div class="stack">
+    <div class="card"><h3>Samples<span class="count">${S.samples.length}</span></h3><div class="tablewrap"><table class="sheet"><thead><tr><th>Sample</th>${S.factors.map(f=>`<th>${esc(f.id)}<span class="role ${R[f.id]}">${ROLE_NAME[R[f.id]]}</span></th>`).join('')}<th>Events</th></tr></thead>
+      <tbody>${S.samples.map((s,si)=>`<tr><td>${esc(s.label)}${si===0?' <em class="tag">template</em>':''}</td>${S.factors.map(f=>`<td>${esc(s.meta[f.id])}</td>`).join('')}<td class="mono">${fmtN(S.n)}</td></tr>`).join('')}</tbody></table></div></div>
+    <div class="card"><h3>Panel<span class="count">${S.channels.filter(c=>c.kind==='fluor').length} colours</span></h3><div class="tablewrap"><table class="sheet"><thead><tr><th>Marker</th><th>Fluorochrome</th><th>Used in</th></tr></thead>
+      <tbody>${S.channels.filter(c=>c.kind==='fluor').map(c=>`<tr><td>${esc(c.label)}</td><td class="mono">${esc(c.fluor)}</td><td>${esc(used(c.id).join(', ')||'–')}</td></tr>`).join('')}</tbody></table></div>
+      <p class="meta" style="margin-top:8px">Gate tree: ${S.gates.map(g=>esc(g.name)).join(' → ').replace(/ → /g,' › ')}. Template from ${esc(S.samples[0].label)}. In the build, the FCS files and the FlowJo workspace (.wsp) fill this in; FlowKit reads both.</p></div>
+  </div><div class="stack">
+    <div class="card"><h3>What each column does</h3><div class="roles">${S.factors.map(f=>`<div class="r"><div><b>${esc(f.id)}</b><small>${f.levels.length} levels: ${esc(f.levels.slice(0,6).join(', '))}${f.levels.length>6?'…':''}</small></div>
+      <select data-role="${f.id}" aria-label="Role of ${esc(f.id)}">${['compare','subject','split','ignore'].map(r=>`<option value="${r}" ${R[f.id]===r?'selected':''} ${r==='compare'&&f.levels.length>4?'disabled':''} ${r==='split'&&f.levels.length>4?'disabled':''}>${ROLE_NAME[r]}</option>`).join('')}</select></div>`).join('')}</div>
+      <p class="hint" style="margin-top:10px">${S.id==='cart'?'Try setting Tissue to Compare. Each mouse gave all three tissues, so Mouse starts pairing them and the Results tab switches to paired tests.':'Try setting Donor to Ignore. The pairing disappears and the Results tab falls back to Welch’s t-test, which is the wrong test for this design.'}</p>
+      <div class="toolbar"><button class="btn small" id="s-reset">Back to suggested roles</button></div></div>
+    <div class="card"><h3>Built from this sheet</h3><ul class="built">${d.lines.map(l=>`<li><b>${esc(l.k)}</b><span>${esc(l.v)}</span></li>`).join('')}<li><b>Check</b><span>The ${esc(S.ch[S.G[S.sweep.gate].conds[S.sweep.cond].ch].label)} line gets a robustness strip in Results, because no clean dip separates the cells there.</span></li></ul></div>
+  </div></div>`;
+  $$('[data-role]',el).forEach(s=>s.onchange=()=>setRole(s.dataset.role,s.value));
+  $('#s-reset').onclick=()=>{ W.roles=Object.assign({},S.defaultRoles); log('Set the study sheet back to its suggested roles.'); renderStudy(); toast('Back to the suggested roles.'); };
+}
+function setRole(fid,role){
+  const S=W.study, R=W.roles, old=R[fid], notes=[];
+  if(role==='compare') S.factors.forEach(f=>{ if(f.id!==fid&&R[f.id]==='compare'){ R[f.id]=f.levels.length<=4?'split':'ignore'; notes.push(`${f.id} moved to ${ROLE_NAME[R[f.id]]}`); } });
+  if(role==='subject') S.factors.forEach(f=>{ if(f.id!==fid&&R[f.id]==='subject'){ R[f.id]='ignore'; notes.push(`${f.id} moved to Ignore`); } });
+  if(old==='compare'&&role!=='compare'){ const alt=S.factors.find(f=>f.id!==fid&&R[f.id]!=='subject'&&f.levels.length>=2&&f.levels.length<=4); if(!alt){ toast('A study needs one column to compare.'); renderStudy(); return; } R[alt.id]='compare'; notes.push(`${alt.id} is now compared`); }
+  R[fid]=role;
+  const sp=S.factors.filter(f=>R[f.id]==='split'); if(sp.length>2){ const drop=sp.find(f=>f.id!==fid); R[drop.id]='ignore'; notes.push(`${drop.id} moved to Ignore (two splits at most)`); }
+  log(`Set ${esc(fid)} to “${ROLE_NAME[role]}” on the study sheet.`);
+  renderStudy(); const d=Eng.describeDesign(S,R); toast(`Rebuilt: ${d.test}${d.sp.length?', split by '+d.sp.map(f=>f.id).join(' and '):''}.${notes.length?' '+notes.join('; ')+'.':''}`);
+}
+
+/* ---------- boot ---------- */
+$$('.tabs [role=tab]').forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
+$$('.switch [role=radio]').forEach(b=>b.onclick=()=>{ if(b.dataset.study!==W.id){ document.body.style.cursor='progress'; setTimeout(()=>{ switchStudy(b.dataset.study); document.body.style.cursor=''; },20); } });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&!$('#modal').hidden) $('#modal').hidden=true; });
+const rerender=()=>{ CC=null; renderTab(); };
+try{ matchMedia('(prefers-color-scheme: dark)').addEventListener('change',rerender); }catch(e){}
+new MutationObserver(rerender).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+let lastW=window.innerWidth, rT=null;
+window.addEventListener('resize',()=>{ clearTimeout(rT); rT=setTimeout(()=>{ if(Math.abs(window.innerWidth-lastW)>40){ lastW=window.innerWidth; renderTab(); } },200); });
+switchStudy('treg',true);
+})();
+</script>

@@ -16,6 +16,7 @@ Data, trained models and experiment workspaces live outside the repo, next to it
 
 - [architecture.md](docs/architecture.md): where things are
 - [spec-plan.md](docs/spec-plan.md): functional spec and build plan for the app
+- [handover.md](docs/handover.md): wiring the gating models into the app (files outside git, set-up, calls)
 - [models.md](docs/models.md): the gating models, the runtime (FCS in, gates out) and per-lab fine-tuning
 - [runtime-api.md](docs/runtime-api.md): exact JSON shapes for the gating runtime and the endpoints they back
 - [decisions.md](docs/decisions.md), [cache-format.md](docs/cache-format.md)
