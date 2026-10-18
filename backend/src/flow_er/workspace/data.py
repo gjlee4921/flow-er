@@ -5,9 +5,11 @@ reading FCS files and workspaces will live; when it gains its loaders, `_open()`
 place to switch over. Nothing in this module trains or places gates: gates come from the
 FlowJo workspace, from the scientist, or later from `flow_er.ml`.
 
-Display space: every channel goes through its transform (the workspace's own, or logicle for
-fluorescence and linear for scatter) so values sit in roughly 0..1, the same space FlowJo's
-gate vertices are stored in. The data lab draws in that space.
+Display space: every channel goes through a transform so values sit in roughly 0..1, and the data
+lab draws in that space. With one workspace whose transforms already give 0..1, that is the
+workspace's own (FlowJo's gate vertices then need no change). Otherwise (several workspaces, or
+FlowJo's biex, which runs to about 4096) it is the gate models' display for every file, and
+FlowJo's shapes are moved into it.
 """
 from __future__ import annotations
 
@@ -139,6 +141,7 @@ class Gate:
     dims: list[str] = field(default_factory=list)  # channel ids (pnn) for x, y
     vertices: list[list[float]] = field(default_factory=list)
     kind: str = "polygon"
+    reviewed_on: str | None = None  # a model gate put up for review: the file it was reviewed on
 
 
 def _words(text: str) -> set[str]:
@@ -205,6 +208,14 @@ class Dataset:
         self.ws = self.workspaces[0][1] if self.workspaces else None
         if self.workspaces:
             self.wsp_path = self.workspaces[0][0]
+        # One display for every file when the workspaces' own would disagree: several workspaces
+        # (each plate its own transforms) or FlowJo's biex scale (not 0-1). Then every file is drawn
+        # and gated in the gate models' display units (linear x/$PnR, logicle T=$PnR W=0.5 M=4.5), so a
+        # gate means the same cells in every file, and model polygons need no conversion.
+        self.uniform = len(self.workspaces) > 1 or any(
+            isinstance(t, fk.transforms.WSPBiexTransform)
+            for ws, name in {id(w): (w, n) for w, n in self._where.values()}.values()
+            for t in ws.get_transforms(name).values())
         self._samples: dict[str, fk.Sample] = {}
         self._events: dict[tuple[str, str], np.ndarray] = {}
         self._subset: dict[str, np.ndarray] = {}
@@ -254,7 +265,22 @@ class Dataset:
 
     # ---- events in display space ------------------------------------------------------
 
+    def recipe_transforms(self, sid: str) -> dict:
+        """The gate models' display transforms for one file: linear x/$PnR for scatter and time,
+        logicle T=$PnR W=0.5 M=4.5 for fluorescence (recipe 1bd7b6e6), each from 0 to about 1."""
+        s = self._sample(sid)
+        out = {}
+        for n, pnn in enumerate(s.pnn_labels, 1):
+            t = float(s.metadata.get(f"p{n}r") or 262144)
+            if SCATTER.match(pnn) or pnn.lower() == "time":
+                out[pnn] = fk.transforms.LinearTransform(param_t=t, param_a=0)
+            else:
+                out[pnn] = fk.transforms.LogicleTransform(param_t=t, param_w=0.5, param_m=4.5, param_a=0)
+        return out
+
     def _transforms(self, sid: str) -> dict:
+        if self.uniform:
+            return self.recipe_transforms(sid)
         if sid in self._where:
             ws, name = self._where[sid]
             return ws.get_transforms(name)
@@ -337,17 +363,52 @@ class Dataset:
                 if hasattr(gd, "vertices"):
                     g.vertices = [[float(a), float(b)] for a, b in gd.vertices]
                     g.kind = "polygon"
+                    if self.uniform:
+                        self._to_uniform(sid, g)
                 elif hasattr(gd, "dimensions") and len(gd.dimensions) == 2:
                     d0, d1 = gd.dimensions
                     if d0.min is not None or d0.max is not None:
-                        lo0, hi0 = d0.min if d0.min is not None else 0, d0.max if d0.max is not None else 1
-                        lo1, hi1 = d1.min if d1.min is not None else 0, d1.max if d1.max is not None else 1
+                        (lo0, hi0), (lo1, hi1) = self._bounds(sid, d0), self._bounds(sid, d1)
                         g.vertices = [[lo0, lo1], [hi0, lo1], [hi0, hi1], [lo0, hi1]]
                         g.kind = "rect"
             except Exception:
                 log.info("no drawable shape for gate %s", key, exc_info=True)
             gates.append(g)
         return gates
+
+    def _move(self, sid: str, dim: str, v: np.ndarray) -> np.ndarray:
+        """Values on one axis of a FlowJo shape, from the workspace's display into the shared one:
+        back to channel values with its transform, forward with the models'. A value at the very
+        bottom or top of FlowJo's scale means "everything past here" (FlowJo piles events beyond its
+        scale on the edge), so it lands well past the edge of the plot (the plot pins it to the edge)."""
+        ws, name = self._where[sid]
+        theirs, ours = ws.get_transforms(name).get(dim), self.recipe_transforms(sid).get(dim)
+        v = np.asarray(v, dtype=float)
+        if theirs is None:
+            return ours.apply(v) if ours is not None else v
+        out = ours.apply(theirs.inverse(v)) if ours is not None else theirs.inverse(v)
+        floor, top = theirs.apply(np.array([-1e9, 1e9], float))
+        out = np.where(v <= floor + 1e-6, -1.0, out)
+        return np.where(v >= top - 1e-6, 2.0, out)
+
+    def _bounds(self, sid: str, d) -> tuple[float, float]:
+        """A rectangle's sides on one axis, in the display the lab draws; an open side sits well past
+        the edge of the plot."""
+        if not self.uniform:
+            return (d.min if d.min is not None else 0, d.max if d.max is not None else 1)
+        lo = float(self._move(sid, d.id, [d.min])[0]) if d.min is not None else -1.0
+        hi = float(self._move(sid, d.id, [d.max])[0]) if d.max is not None else 2.0
+        return lo, hi
+
+    def _to_uniform(self, sid: str, g: Gate) -> None:
+        """A FlowJo polygon moved into the shared display. Each edge is split first, since a straight
+        edge in one display is a curve in another."""
+        v = np.asarray(g.vertices, dtype=float)
+        t = np.linspace(0, 1, 24, endpoint=False)[:, None]
+        v = np.concatenate([a + t * (b - a) for a, b in zip(v, np.roll(v, -1, axis=0))])
+        for j, c in enumerate(g.dims):
+            v[:, j] = self._move(sid, c, v[:, j])
+        g.vertices = v.tolist()
 
     def flowjo_membership(self, sid: str, key: str) -> np.ndarray:
         self._analyse(sid)

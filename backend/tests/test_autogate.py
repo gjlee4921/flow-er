@@ -27,6 +27,27 @@ def test_every_workspace_is_read_and_files_are_known_by_name():
     assert len(ds.flowjo_gates(hc)) == 16 and ds._sample(hc).event_count != ds._sample("ALS Specimen_001_C1_C01 Negative.fcs").event_count
 
 
+
+@needs_als
+def test_one_display_for_every_file_and_flowjo_shapes_still_hold():
+    """The HC and ALS workspaces scale FITC differently, and FlowJo's biex runs to about 4096, so
+    the lab draws every file in the models' 0-1 display. FlowJo's own gates, moved into it, still
+    hold the cells FlowJo says they hold."""
+    import numpy as np
+    from flow_er.workspace.data import Dataset, in_polygon
+    ds = Dataset(ALS)
+    assert ds.uniform
+    for sid in ("HC Specimen_001_C5_C05 Peptide.fcs", "ALS Specimen_001_C8_C08 Peptide.fcs"):
+        cols, ev = list(ds._sample(sid).pnn_labels), ds.events(sid)
+        assert 0.1 < np.median(ev[:, cols.index("FITC-A")]) < 0.5
+        for g in ds.flowjo_gates(sid):
+            if len(g.dims) != 2 or not g.vertices:
+                continue
+            parent = ds.flowjo_membership(sid, g.parent) if g.parent else np.ones(len(ev), bool)
+            mine = parent & in_polygon(ev[:, cols.index(g.dims[0])], ev[:, cols.index(g.dims[1])], g.vertices)
+            truth = ds.flowjo_membership(sid, g.key)
+            assert (mine ^ truth).sum() <= max(3, 0.02 * truth.sum()), (sid, g.key, mine.sum(), truth.sum())
+
 def test_who_each_file_came_from_is_read_from_its_name():
     names = [f"{g} Specimen_001_C{n}_C{n:02d} {c}.fcs" for g in ("ALS", "HC") for n, c in
              zip(range(1, 7), ["Negative", "Peptide", "Positive"] * 2)]

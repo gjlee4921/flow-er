@@ -7,7 +7,8 @@ round(100 × v) clipped to 0–100 on the display value v. The image holds event
 normalise them as log1p(count) / max themselves.
 
 Regions found on an image come back as polygons in this recipe's display space; `to_lab` turns them
-into the lab's own display space (the FlowJo workspace's transforms), where gates are drawn.
+into the lab's display space, where gates are drawn (the same space when the lab uses the models'
+display; see `data.py`).
 """
 from __future__ import annotations
 
