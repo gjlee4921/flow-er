@@ -5,7 +5,7 @@ tool layer cannot do. The agent decides the order and the reasons; code checks t
 """
 from __future__ import annotations
 
-from flow_er.workspace import nodes, store
+from flow_er.workspace import nodes, scripts, store
 
 KINDS = {"macro", "model", "measure", "view"}
 # op -> (kind, what it does), from the node types: the agent sees this list in the plan tool's description
@@ -37,15 +37,23 @@ def validate(steps: list[dict]) -> list[dict]:
             got = nodes.port_type(inp, out)
             if "*" not in takes and got != "*" and got not in takes:
                 problems.append(f"{where}: input '{inp}' is {got}, but {nodes.NODE_TYPES[op]['name']} takes {', '.join(takes)}")
-        if op == "custom_macro" and not s.get("macro_id"):
-            problems.append(f"{where}: a custom macro needs the macro_id from write_macro")
+        if op == "custom_macro":
+            code = (s.get("script") or {}).get("code")
+            if not code:
+                problems.append(f"{where}: a script step needs its script; ask write_macro to write and test one")
+            else:
+                c = scripts.check(code)
+                problems += [f"{where}: {p}" for p in c["problems"]]
+                if c["ok"] and len(c["inputs"]) != len(s.get("inputs", [])):
+                    problems.append(f"{where}: the script reads {len(c['inputs'])} inputs but the step gives it {len(s.get('inputs', []))}")
         seen_ids.add(sid)
         produced.update(s.get("outputs", []))
         out.append({"id": sid, "op": op, "kind": kind, "title": s.get("title") or op.replace("_", " "),
                     "inputs": list(s.get("inputs", [])), "outputs": list(s.get("outputs", [])),
                     "why": s.get("why", ""), **({"macro_id": s["macro_id"]} if s.get("macro_id") else {}),
                     **({"params": nodes.params(op, s.get("params"))} if nodes.NODE_TYPES[op].get("params") else {}),
-                    **({"gate": s["gate"]} if s.get("gate") else {})})
+                    **({"gate": s["gate"]} if s.get("gate") else {}),
+                    **({"script": s["script"]} if s.get("script") else {})})
     if problems:
         raise ValueError("; ".join(problems))
     return out

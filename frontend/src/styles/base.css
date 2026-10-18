@@ -424,3 +424,5 @@ button.li.out svg { width: 15px; height: 15px; color: var(--text-3); }
   .hide-sm { display: none !important; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } .shimmer { color: var(--text-3); background: none; } }
+/* a long link or file name in a message wraps inside its bubble instead of widening the chat */
+.u, .a .md, .a .md code { overflow-wrap: anywhere; }

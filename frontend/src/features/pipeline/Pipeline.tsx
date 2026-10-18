@@ -10,7 +10,7 @@ import {
   type Edge as RFEdge, type Node as RFNode, type NodeProps,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { api, type Execution, type ExperimentState, type Step } from "../../api";
+import { api, type Execution, type ExperimentState, type Script, type Step } from "../../api";
 import { followRun, refresh, useExecutions, useNodeTypes, useStepOutput } from "../../api/hooks";
 import { Flower, Icon } from "../../components/icons";
 import { clamp, fmt, ui, useUi } from "../../lib";
@@ -85,24 +85,34 @@ function Canvas({ s }: { s: ExperimentState }) {
   const lastRun = useMemo(() => Object.fromEntries(s.runs.map((r) => [r.step, r])), [s.runs]);
   // in a draft, only the steps it adds or changes are drafts; the rest are the kept steps as they were
   const kept = useMemo(() => Object.fromEntries(s.plan.map((k) => [k.id, k])), [s.plan]);
-  const same = (a: Step, b?: Step) => !!b && JSON.stringify([a.op, a.inputs, a.outputs, a.params ?? {}]) === JSON.stringify([b.op, b.inputs, b.outputs, b.params ?? {}]);
+  const same = (a: Step, b?: Step) => !!b && JSON.stringify([a.op, a.inputs, a.outputs, a.params ?? {}, a.script?.code]) === JSON.stringify([b.op, b.inputs, b.outputs, b.params ?? {}, b.script?.code]);
 
   const cards = useMemo<Card[]>(() => {
     const src: Card[] = [{ id: "fcs", kind: "source", title: "FCS files", sub: `${s.snapshot.samples.length} files`, status: "done", outputs: ["fcs"], inputs: [] }];
     if (s.snapshot.flowjo_workspace) src.push({ id: "wsp", kind: "source", title: "FlowJo workspace", sub: s.snapshot.flowjo_workspace, status: "done", outputs: ["wsp"], inputs: [] });
     if (s.snapshot.uploads.length) src.push({ id: "uploads", kind: "source", title: "Added in the chat", sub: `${s.snapshot.uploads.length} files`, status: "done", outputs: ["uploads"], inputs: [] });
     return src.concat(steps.map((st) => ({
-      id: st.id, kind: st.kind, title: st.title, sub: st.op.replace(/_/g, " "), step: st,
+      id: st.id, kind: st.kind, title: st.title, sub: st.op === "custom_macro" ? "script" : st.op.replace(/_/g, " "), step: st,
       status: draftPlan && !same(st, kept[st.id]) ? "draft" : building ? "building" : lastRun[st.id]?.status ?? "planned", outputs: st.outputs, inputs: st.inputs,
     })));
   }, [s, steps, draftPlan, building, lastRun, kept]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pos = useMemo(() => {
-    const rows: Record<string, number> = {};
+    const rows: Record<number, number> = {};
     const out: Record<string, [number, number]> = {};
+    const lane: Record<string, number> = {};
     for (const n of cards) {
-      const c = Math.max(0, COLS.indexOf(n.kind as (typeof COLS)[number]));
-      const r = (rows[n.kind] = (rows[n.kind] ?? -1) + 1);
+      // a stage per lane; a script sits with the latest stage it reads from (one reading the counts
+      // goes under Measure), so its lines run forward instead of climbing back
+      let c = Math.max(0, COLS.indexOf(n.kind as (typeof COLS)[number]));
+      if (n.step?.op === "custom_macro") {
+        for (const i of n.inputs) {
+          const from = cards.find((m) => m.outputs.includes(i));
+          if (from && lane[from.id] != null) c = Math.max(c, lane[from.id]);
+        }
+      }
+      lane[n.id] = c;
+      const r = (rows[c] = (rows[c] ?? -1) + 1);
       out[n.id] = down ? [30 + r * (NW + GAPD), 40 + c * ROWD] : [30 + c * COLW, 40 + r * ROWH];
     }
     return out;
@@ -220,6 +230,29 @@ function Canvas({ s }: { s: ExperimentState }) {
   );
 }
 
+/** A script step's code with where it came from and the test it passed, as the spec asks before it
+ *  can be kept: provenance, licence, a hand-worked answer on a fixture, and the same output twice. */
+function ScriptView({ script: sc }: { script: Script }) {
+  const p = sc.provenance ?? {};
+  const t = sc.test;
+  return (
+    <div className="np-script">
+      {p.what && <p>{p.what}</p>}
+      <dl className="np-prov">
+        <dt>Source</dt>
+        <dd>{p.source ? <><a href={p.source} target="_blank" rel="noreferrer noopener">{p.source.replace(/^https?:\/\/(www\.)?/, "")}</a>{p.version ? ` · ${p.version}` : ""}</> : "Written for this step"}</dd>
+        <dt>Licence</dt><dd>{p.licence ? <span className="pill">{p.licence}</span> : "None needed"}</dd>
+        {p.adapted && <><dt>Adapted</dt><dd>{p.adapted}</dd></>}
+        <dt>Test</dt>
+        <dd className={t?.passed ? "ok" : "bad"}>{t?.passed
+          ? `Passed in the sandbox: the hand-worked answer on a small fixture, and the same output twice${t.seconds != null ? ` (${t.seconds} s)` : ""}.`
+          : `Not passed${t?.problems?.length ? `: ${t.problems.join("; ")}` : ""}.`}</dd>
+      </dl>
+      <pre className="np-code"><code>{sc.code.trim()}</code></pre>
+    </div>
+  );
+}
+
 /** One line on how a run went: what was redone, what was reused because nothing it reads changed. */
 export function runLine(r: { nodes: Record<string, { status: string }> }): string {
   const ns = Object.values(r.nodes);
@@ -238,7 +271,7 @@ function NodePanel({ s, card, draft, onClose, onRun, run }: { s: ExperimentState
   const step = card.step!;
   const { data: types } = useNodeTypes();
   const { data: out } = useStepOutput(s.id, step.id);
-  const [tab, setTab] = useState<"input" | "settings" | "output">("output");
+  const [tab, setTab] = useState<"input" | "settings" | "code" | "output">(step.script && !out?.ran ? "code" : "output");
   const type = types?.types[step.op];
   const allSteps = s.plan;
   const from = (inp: string) => allSteps.find((x) => x.outputs.includes(inp));
@@ -253,8 +286,8 @@ function NodePanel({ s, card, draft, onClose, onRun, run }: { s: ExperimentState
     <aside className="inspector node-panel" aria-label={card.title}>
       <div className="insp-h"><span className="np-t"><b>{card.title}</b><small>{type?.name ?? step.op}</small></span><button className="ib sm" aria-label="Close" onClick={onClose}><Icon.close /></button></div>
       <div className="np-tabs" role="tablist">
-        {(["input", "settings", "output"] as const).map((t) => (
-          <button key={t} role="tab" aria-selected={tab === t} className="np-tab" onClick={() => setTab(t)}>{{ input: "Input", settings: "Settings", output: "Output" }[t]}</button>
+        {(step.script ? (["input", "code", "output"] as const) : (["input", "settings", "output"] as const)).map((t) => (
+          <button key={t} role="tab" aria-selected={tab === t} className="np-tab" onClick={() => setTab(t)}>{{ input: "Input", settings: "Settings", code: "Code", output: "Output" }[t]}</button>
         ))}
       </div>
       <div className="insp-b">
@@ -279,6 +312,7 @@ function NodePanel({ s, card, draft, onClose, onRun, run }: { s: ExperimentState
             ))}<p className="small muted">A change is a draft of the plan: keep it, and the next run redoes this step and what reads from it; everything else is reused.</p></div>
           ) : <p className="small muted">This step has no settings.</p>
         )}
+        {tab === "code" && step.script && <ScriptView script={step.script} />}
         {tab === "output" && (
           <>
             {run?.status === "running" ? <p className="np-status"><Flower className="sm" /> Running…</p>

@@ -25,6 +25,13 @@ export type Step = {
   inputs: string[]; outputs: string[]; why: string; gate?: string; macro_id?: string;
   /** the step's settings, from its node type */
   params?: Record<string, string>;
+  /** a script step's script: its code, where it came from, and the test it passed in the sandbox */
+  script?: Script;
+};
+export type Script = {
+  code: string;
+  provenance: { what?: string; source?: string | null; version?: string | null; licence?: string | null; adapted?: string };
+  test?: { passed: boolean; problems?: string[]; hash?: string; seconds?: number };
 };
 export type Run = { step: string; op: string; status: string; summary: string; at: string; table?: string };
 export type Draft = { id: string; kind: "plan" | "gate" | "view" | "macro" | "report"; payload: any; summary: string; created: string };
@@ -77,6 +84,7 @@ export type UiEvent =
   | { type: "refresh" }
   | { type: "execution"; id: string }
   | { type: "memory"; action: "added" | "forgotten"; id: string; text: string }
+  | { type: "progress"; text: string }
   | { type: "open"; page: string }
   | { type: "lab"; fig?: string | null; sample?: string; parent?: string | null; x?: string; y?: string; stage?: string; mode?: string;
       view?: "plot" | "table" | "saved"; sel?: string | null; compare?: boolean; sheetGates?: string[]; sheetCols?: string[];
