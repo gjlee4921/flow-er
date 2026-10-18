@@ -24,7 +24,7 @@ from typing import Any
 
 from flow_er.config import settings
 
-STATE_FILES = {"plan": [], "gates": [], "views": [], "macros": [], "runs": []}
+STATE_FILES = {"plan": [], "gates": [], "views": [], "macros": [], "runs": [], "sample_meta": []}
 
 
 def root() -> Path:
@@ -141,6 +141,7 @@ APPLY = {
     "gate": ("gates", "append"),
     "view": ("views", "append"),
     "macro": ("macros", "append"),
+    "sample_meta": ("sample_meta", "replace"),
 }
 
 

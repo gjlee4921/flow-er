@@ -24,6 +24,7 @@ from flow_er.workspace import (
     models,
     nodes,
     plan,
+    samplemeta,
     scripts,
     store,
     toolkit,
@@ -129,6 +130,8 @@ def snapshot(exp_id: str) -> dict:
         "title": m.get("title"), "question": m.get("question") or None,
         "data_folder": m.get("data_path", "").split("/")[-1],
         "samples": [{"id": s["id"], "events": s["events"]} for s in ds.samples()],
+        # who each file came from (kept, or read from file names until kept): the gate models need it
+        "sample_meta": [{k: r[k] for k in ("sample", "individual", "condition", "unstim", "kept")} for r in samplemeta.get(exp_id)],
         "channels": [c["short"] for c in ds.channels()],
         "flowjo_workspace": ds.wsp_path.name if ds.wsp_path else None,
         "plan": [{"id": s["id"], "op": s["op"], "title": s["title"], "run": runs.get(s["id"], "not run")}
