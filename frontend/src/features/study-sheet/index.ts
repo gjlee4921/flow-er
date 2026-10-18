@@ -1,2 +1,2 @@
-// Study sheet: samples, factors and their roles.
-export {};
+// Picking the data an experiment reads.
+export { default as Start } from "./Start";

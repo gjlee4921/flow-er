@@ -1,3 +1,63 @@
+// The shell: the plan on the left, the conversation in the middle, the workflow panel on the right.
+import { useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { api } from "./api";
+import { useExperiment } from "./api/hooks";
+import { Icon } from "./components/icons";
+import { Resizer, widthOf } from "./components/Resizer";
+import Chat from "./features/agent/Chat";
+import MemoryPanel from "./features/shell/MemoryPanel";
+import Panel from "./features/shell/Panel";
+import Rail from "./features/shell/Rail";
+import Start from "./features/study-sheet/Start";
+import { ui, useUi } from "./lib";
+
 export default function App() {
-  return <h1>flow-er</h1>;
+  const qc = useQueryClient();
+  const exp = useUi((u) => u.exp);
+  const page = useUi((u) => u.page);
+  const panelOpen = useUi((u) => u.panelOpen);
+  const full = useUi((u) => u.full);
+  const railOpen = useUi((u) => u.railOpen);
+  const toast = useUi((u) => u.toast);
+  const { data: state, error } = useExperiment(exp);
+
+  // note when a project is opened, so the project list leads with it
+  useEffect(() => { if (exp) api.projectOpened(exp).then(() => qc.invalidateQueries({ queryKey: ["experiments"] }), () => {}); }, [exp]); // eslint-disable-line react-hooks/exhaustive-deps
+  // an experiment that no longer exists (deleted, or a different machine) sends us back to the start
+  useEffect(() => { if (error) ui.openProject(null); }, [error]);
+  // opening an experiment that already has a plan shows the plan, not the empty panel
+  useEffect(() => { if (state && ui.get().page === "none" && (state.plan.length || state.draft)) ui.open("flow"); }, [state?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || (e.target as Element)?.closest?.("textarea,input,select")) return;
+      const s = ui.get();
+      if (s.page === "lab") ui.leaveLab();
+      else if (s.full) ui.set({ full: false });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const cls = ["ws", panelOpen && exp ? "" : "noviews", full ? "fullviews" : "", page === "lab" ? "labmode" : "", railOpen ? "" : "norail"].filter(Boolean).join(" ");
+  return (
+    <div className={cls} id="ws" aria-label="Analysis workspace">
+      <div className="ws-body">
+        <Rail exp={exp} />
+        {!railOpen && (
+          <button className="ib sm rail-open" aria-label="Show the navigator" onClick={() => ui.set({ railOpen: true })}><Icon.sidebar /></button>
+        )}
+        {exp ? <Chat key={exp} exp={exp} /> : <Start />}
+        <Panel exp={exp} />
+        <Resizer className="rsz-rail" cssVar="--railw" side="left" label="Sidebar width" measure={widthOf(".ws-rail")} min={200} max={() => 400} />
+        {exp && <Resizer className="rsz-views" cssVar="--panelw" side="right" label="Panel width" measure={widthOf(".ws-views")} min={380}
+          max={() => window.innerWidth - (document.querySelector(".ws-rail")?.getBoundingClientRect().width ?? 0) - 400} />}
+        {!panelOpen && exp && (
+          <button className="btn sm panel-open" onClick={() => ui.set({ panelOpen: true })}><Icon.sidebar />Workflow</button>
+        )}
+      </div>
+      <MemoryPanel />
+      {toast && <div className="toast" role="status">{toast}</div>}
+    </div>
+  );
 }

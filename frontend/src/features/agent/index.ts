@@ -1,2 +1,2 @@
 // Plain-language requests and the tool calls they trigger.
-export {};
+export { default as Chat, askInChat } from "./Chat";
