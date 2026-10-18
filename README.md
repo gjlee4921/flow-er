@@ -20,13 +20,6 @@ The full numbers, the models we tried and dropped (a shared U-Net, CytoBERT) and
 
 ## Docs
 
-On Confluence:
-
-- [flow-er PRD](https://darling-so.atlassian.net/wiki/spaces/darlingso/pages/40599642/flow-er+PRD): what it is for, and its scope as built
-- [flow-er tech spec](https://darling-so.atlassian.net/wiki/spaces/darlingso/pages/40599700/flow-er+tech+spec): the model and where it came from, the fine-tuning loop, the stack, the agent
-- [flow-er results](https://darling-so.atlassian.net/wiki/spaces/darlingso/pages/40501385/flow-er+results): the locked tests and the loop comparison
-- [flow-er agent tech spec](https://darling-so.atlassian.net/wiki/spaces/darlingso/pages/40599676/flow-er+agent+tech+spec): the agent's design, written before the build
-
 In this repo:
 
 - [architecture.md](docs/architecture.md): where things are
