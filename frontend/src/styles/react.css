@@ -531,8 +531,26 @@ input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="r
 .db-sub { font-size: 12.5px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .db-meta { display: flex; justify-content: space-between; gap: 8px; margin-top: 4px; font-size: 12px; color: var(--text-2); }
 .db-more { justify-self: start; }
-.start-dash .ds-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
-.start-dash .st-ways { max-width: 1100px; }
+.db-left { display: grid; gap: 28px; min-width: 0; }
+.db-count { font-size: 12.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.ds-mini-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+.ds-mini { all: unset; box-sizing: border-box; display: grid; gap: 1px; min-width: 0; padding: 8px 12px; border: 1px solid var(--sep-2); border-radius: 10px; background: var(--raised); cursor: pointer; transition: border-color .15s, background .15s; }
+.ds-mini:hover { border-color: var(--sel-line); background: var(--hover); }
+.ds-mini:focus-visible { outline: 2px solid var(--fl-core); outline-offset: 2px; }
+.ds-mini.on { border-color: var(--fl-core); box-shadow: 0 0 0 3px var(--sel); }
+.ds-mini b { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-mini span { font-size: 11.5px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.db-bar { position: relative; display: flex; align-items: center; gap: 8px; height: 42px; padding: 0 5px; border: 1px solid var(--sep-2); border-radius: 12px; background: var(--raised); overflow: hidden; }
+.db-bar:focus-within { border-color: var(--sel-line); box-shadow: 0 0 0 3px var(--sel); }
+.db-bar > .i { width: 15px; height: 15px; color: var(--text-3); flex: none; }
+.db-bar input:focus-visible { outline: none; box-shadow: none; }
+.db-bar input:not([type=file]) { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font: inherit; font-size: 13.5px; color: var(--text); }
+.db-up { all: unset; flex: none; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 8px; background: var(--fill); font-size: 13px; font-weight: 500; color: var(--text); cursor: pointer; }
+.db-up:hover, .db-up:focus-visible { background: var(--hover); }
+.db-up[disabled] { opacity: .6; cursor: progress; }
+.db-up .i { width: 14px; height: 14px; }
+.db-prog { position: relative; flex: none; display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 7px; background: var(--fill); font-size: 12px; color: var(--text-2); overflow: hidden; font-variant-numeric: tabular-nums; white-space: nowrap; isolation: isolate; }
+.db-prog i { position: absolute; inset: 0 auto 0 0; background: color-mix(in srgb, var(--fl) 28%, var(--fill)); transition: width .2s; z-index: -1; }
 
 /* a lab's models: the flower breathes and glows while live, turns black and white when outdated,
    and stills when the models cannot run here */

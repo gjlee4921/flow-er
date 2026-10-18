@@ -1,5 +1,5 @@
-// Before there is a project: a dashboard of what is here (projects, the lab's gating models, datasets)
-// and a way to bring more data. Starting an analysis lives in the flower at the bottom (Dock): it
+// Before there is a project: a dashboard of what is here (projects, datasets, the lab's gating models)
+// and one bar to find a dataset, link a folder or upload files. Starting an analysis lives in the flower at the bottom (Dock): it
 // unfolds into the composer, which opens the project and, with a question, plans it at once.
 import { useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -68,9 +68,9 @@ export default function Start() {
   const [busy, setBusy] = useState(false);
   const [upload, setUpload] = useState<{ share: number; names: string } | null>(null);
   const [rejected, setRejected] = useState<Rejected[]>([]);
-  const [path, setPath] = useState("");
+  // the bar under the datasets: a search, or a folder path to read in place
+  const [q, setQ] = useState("");
   const [folderErr, setFolderErr] = useState("");
-  const [over, setOver] = useState(false);
   const [find, setFind] = useState("");
   const [allProjects, setAllProjects] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -94,10 +94,19 @@ export default function Start() {
     }
   };
 
-  const useFolder = async () => {
+  const pathLike = /^(~|\/|\\\\|[A-Za-z]:[\\/])/.test(q.trim());
+  const data = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    if (!t || pathLike) return datasets ?? [];
+    return (datasets ?? []).filter((d) => [d.label, d.name, ...d.markers].some((x) => x.toLowerCase().includes(t)));
+  }, [datasets, q, pathLike]);
+  // Enter: a path links that folder; a search with one match chooses it
+  const submitBar = async () => {
     setFolderErr("");
-    try { await landed(await api.linkFolder(path.trim())); setPath(""); }
-    catch (e) { setFolderErr((e as Error).message); }
+    if (pathLike) {
+      try { await landed(await api.linkFolder(q.trim())); setQ(""); }
+      catch (e) { setFolderErr((e as Error).message); }
+    } else if (data.length === 1) choose(data[0]);
   };
 
   const start = async (d: Dataset | null = chosen) => {
@@ -140,20 +149,59 @@ export default function Start() {
         )}
 
         <div className="db-cols">
-          <section className="st-sec">
-            <div className="st-h2row"><h2>Projects</h2>
-              {!!live.length && <label className="st-find"><Icon.search /><input id="start-find" value={find} onChange={(e) => setFind(e.target.value)} placeholder="Find a project" aria-label="Find a project" /></label>}
-            </div>
-            {live.length ? (
-              <div className="db-projs">
-                {(allProjects ? shown : shown.slice(0, 6)).map((e) => <ProjectCard key={e.id} e={e} />)}
-                {!shown.length && <p className="note">No project matches.</p>}
+          <div className="db-left">
+            <section className="st-sec">
+              <div className="st-h2row"><h2>Projects</h2>
+                {!!live.length && <label className="st-find"><Icon.search /><input id="start-find" value={find} onChange={(e) => setFind(e.target.value)} placeholder="Find a project" aria-label="Find a project" /></label>}
               </div>
-            ) : <p className="note">No projects yet. Pick a dataset below and open the flower to start one.</p>}
-            {shown.length > 6 && (
-              <button className="btn sm plain db-more" onClick={() => setAllProjects(!allProjects)}>{allProjects ? "Show fewer" : `Show all ${shown.length}`}</button>
-            )}
-          </section>
+              {live.length ? (
+                <div className="db-projs">
+                  {(allProjects ? shown : shown.slice(0, 6)).map((e) => <ProjectCard key={e.id} e={e} />)}
+                  {!shown.length && <p className="note">No project matches.</p>}
+                </div>
+              ) : <p className="note">No projects yet. Pick a dataset below and open the flower to start one.</p>}
+              {shown.length > 6 && (
+                <button className="btn sm plain db-more" onClick={() => setAllProjects(!allProjects)}>{allProjects ? "Show fewer" : `Show all ${shown.length}`}</button>
+              )}
+            </section>
+
+            <section className="st-sec">
+              <div className="st-h2row"><h2>Datasets</h2>{datasets && <span className="db-count">{q ? `${data.length} of ${datasets.length}` : datasets.length}</span>}</div>
+              <div className="ds-mini-grid">
+                {isLoading && <span className="thinking"><Flower /><span className="shimmer">Looking in DATA_DIR…</span></span>}
+                {data.map((d) => (
+                  <button key={d.name} data-feeds-dock className={`ds-mini${chosen?.name === d.name ? " on" : ""}`} aria-pressed={chosen?.name === d.name}
+                    onClick={() => choose(d)} onDoubleClick={() => start(d)}
+                    title={`${KIND[d.kind]}${d.markers.length ? ` · ${d.markers.slice(0, 12).join(", ")}` : ""}
+Choose this data; double-click to open it now`}>
+                    <b>{d.label}</b>
+                    <span>{d.files} file{d.files === 1 ? "" : "s"} · {fmt(d.size_mb, d.size_mb < 100 ? 1 : 0)} MB{d.workspace ? " · FlowJo" : ""}</span>
+                  </button>
+                ))}
+                {datasets && !datasets.length && <p className="note">No datasets yet. Upload files or type a folder below.</p>}
+                {datasets && !!datasets.length && !data.length && !pathLike && <p className="note">No dataset matches “{q}”.</p>}
+              </div>
+              <form className="db-bar" onSubmit={(e) => { e.preventDefault(); submitBar(); }}>
+                <input ref={fileInput} id="start-files" type="file" multiple hidden accept=".fcs,.wsp,.csv,.tsv,.txt,.md,.pdf,.docx,.xlsx"
+                  onChange={(e) => { send(Array.from(e.target.files ?? [])); e.target.value = ""; }} />
+                <button type="button" className="db-up" onClick={() => fileInput.current?.click()} disabled={!!upload}
+                  title="Upload FCS files, their FlowJo workspace, and a protocol or plate map"><Icon.upload /><span>Upload</span></button>
+                <Icon.search />
+                <input id="start-path" value={q} onChange={(e) => { setQ(e.target.value); setFolderErr(""); }}
+                  placeholder="Find a dataset, or paste a folder on this computer (read in place, not copied)" aria-label="Find a dataset or use a folder" />
+                {pathLike && <button className="btn sm ink" type="submit">Use folder</button>}
+                {upload && (
+                  <span className="db-prog" role="progressbar" aria-valuenow={Math.round(upload.share * 100)} aria-valuemin={0} aria-valuemax={100}>
+                    <i style={{ width: `${Math.round(upload.share * 100)}%` }} />{upload.share < 1 ? `${upload.names} ${Math.round(upload.share * 100)}%` : "Checking…"}
+                  </span>
+                )}
+              </form>
+              {folderErr && <span className="way-err" role="alert">{folderErr}</span>}
+              {!!rejected.length && (
+                <div className="st-rejected" role="status"><b>Not taken:</b> {rejected.map((r) => `${r.name} (${r.why})`).join("; ")}</div>
+              )}
+            </section>
+          </div>
 
           <section className="st-sec">
             <h2>Gating models</h2>
@@ -165,57 +213,6 @@ export default function Start() {
             {health && <p className="db-sub db-agent"><Bloom p={1} className="xs" /> Agent: {health.llm_key === "loaded" ? `${health.model} ready` : "no key"}</p>}
           </section>
         </div>
-
-        <section className="st-sec">
-          <h2>Datasets</h2>
-          <div className="ds-grid">
-            {isLoading && <span className="thinking"><Flower /><span className="shimmer">Looking in DATA_DIR…</span></span>}
-            {datasets?.map((d) => (
-              <button key={d.name} data-feeds-dock className={`ds-card${chosen?.name === d.name ? " on" : ""}`} aria-pressed={chosen?.name === d.name}
-                onClick={() => choose(d)} onDoubleClick={() => start(d)} title="Choose this data; double-click to open it now">
-                <span className={`ds-kind ${d.kind}`}>{KIND[d.kind]}</span>
-                <b>{d.label}</b>
-                <span>{d.files} FCS file{d.files === 1 ? "" : "s"} · {fmt(d.size_mb, 1)} MB{d.workspace ? " · FlowJo workspace" : ""}</span>
-                {!!d.markers.length && <span className="ds-markers">{d.markers.slice(0, 10).map((m) => <i key={m}>{m}</i>)}</span>}
-              </button>
-            ))}
-            {datasets && !datasets.length && <p className="note">No datasets yet. Bring some below.</p>}
-          </div>
-        </section>
-
-        <section className="st-sec">
-          <h2>Bring data</h2>
-          <div className="st-ways">
-            <div className={`way drop${over ? " over" : ""}`} id="start-drop" role="button" tabIndex={0}
-              onClick={() => fileInput.current?.click()} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") fileInput.current?.click(); }}
-              onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); setOver(true); } }}
-              onDragLeave={() => setOver(false)} onDrop={(e) => { e.preventDefault(); setOver(false); send(Array.from(e.dataTransfer.files)); }}>
-              <input ref={fileInput} id="start-files" type="file" multiple hidden accept=".fcs,.wsp,.csv,.tsv,.txt,.md,.pdf,.docx,.xlsx"
-                onChange={(e) => { send(Array.from(e.target.files ?? [])); e.target.value = ""; }} />
-              <span className="way-ic"><Icon.upload /></span>
-              <b>Drop or choose files</b>
-              <span>FCS files, their FlowJo workspace, and a protocol or plate map if you have one</span>
-              {upload && (
-                <div className="way-progress" role="progressbar" aria-valuenow={Math.round(upload.share * 100)} aria-valuemin={0} aria-valuemax={100}>
-                  <i style={{ width: `${Math.round(upload.share * 100)}%` }} /><span>{upload.share < 1 ? `Uploading ${upload.names}: ${Math.round(upload.share * 100)}%` : "Checking the files…"}</span>
-                </div>
-              )}
-            </div>
-            <form className="way folder" onSubmit={(e) => { e.preventDefault(); useFolder(); }}>
-              <span className="way-ic"><Icon.folder /></span>
-              <b>Use a folder on this computer</b>
-              <span>Read where it is, so large files are not copied</span>
-              <div className="way-row">
-                <input id="start-path" value={path} onChange={(e) => setPath(e.target.value)} placeholder="~/data/my-experiment" aria-label="Folder path" />
-                <button className="btn sm" type="submit" disabled={!path.trim()}>Use folder</button>
-              </div>
-              {folderErr && <span className="way-err" role="alert">{folderErr}</span>}
-            </form>
-          </div>
-          {!!rejected.length && (
-            <div className="st-rejected" role="status"><b>Not taken:</b> {rejected.map((r) => `${r.name} (${r.why})`).join("; ")}</div>
-          )}
-        </section>
       </div></div>
       <Dock state={dock} setState={setDock} text={text} setText={setText} chosen={chosen} setChosen={choose}
         datasets={datasets ?? []} busy={busy} onStart={() => start()} />
