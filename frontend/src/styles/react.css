@@ -517,3 +517,57 @@ input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="r
 .lab-ask { margin: 10px 10px 10px 2px; border: 1px solid var(--sep-2); border-radius: 20px; overflow: hidden;
   box-shadow: 0 14px 44px rgba(0,0,0,.13), 0 2px 8px rgba(0,0,0,.05); }
 @media (max-width: 900px) { .lab-ask { margin: 8px; border: 1px solid var(--sep-2); } }
+
+/* start page: a dashboard of projects, gating models and data; the composer folds into a flower (Dock) */
+.start-dash { position: relative; }
+.start-dash .thread.start-page { max-width: 980px; gap: 26px; padding-bottom: 140px; }
+.db-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.db-stat { display: grid; gap: 2px; padding: 12px 14px; border: 1px solid var(--sep); border-radius: 14px; background: var(--panel); min-width: 0; }
+.db-stat .k { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--text-3); }
+.db-stat b { font-size: 24px; font-weight: 650; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+.db-stat .s { font-size: 12px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.db-cols { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.db-projs { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.db-proj { all: unset; box-sizing: border-box; display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 8px; row-gap: 2px; align-items: center; min-width: 0; padding: 12px 14px; border: 1px solid var(--sep-2); border-radius: 14px; background: var(--raised); cursor: pointer; transition: border-color .15s, background .15s; }
+.db-proj:hover { border-color: var(--sel-line); background: var(--hover); }
+.db-proj:focus-visible { outline: 2px solid var(--fl-core); outline-offset: 2px; }
+.db-proj b { font-size: 14.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.db-proj .db-sub, .db-proj .db-meta { grid-column: 2; }
+.db-sub { font-size: 12.5px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.db-meta { display: flex; justify-content: space-between; gap: 8px; margin-top: 4px; font-size: 12px; color: var(--text-2); }
+.db-more { justify-self: start; }
+.db-labs { display: grid; gap: 10px; }
+.db-lab { display: grid; gap: 8px; padding: 12px 14px; border: 1px solid var(--sep-2); border-radius: 14px; background: var(--raised); }
+.db-lab-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 14.5px; }
+.db-dl { margin: 0; display: grid; gap: 5px; font-size: 12.5px; }
+.db-dl div { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 8px; }
+.db-dl dt { color: var(--text-3); }
+.db-dl dd { margin: 0; color: var(--text); }
+.db-agent { display: flex; align-items: center; gap: 6px; margin: 0; }
+@media (max-width: 900px) { .db-cols { grid-template-columns: minmax(0, 1fr); } .db-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.dock { position: absolute; left: 50%; bottom: max(22px, env(safe-area-inset-bottom, 0px)); z-index: 20; transform: translateX(-50%);
+  width: 52px; max-width: calc(100% - 32px); max-height: 52px; overflow: hidden; border-radius: 26px; border: 1px solid var(--sep-2);
+  background: color-mix(in srgb, var(--raised) 70%, transparent); backdrop-filter: blur(18px) saturate(1.5); -webkit-backdrop-filter: blur(18px) saturate(1.5);
+  box-shadow: var(--shadow-pop); transition: width .38s var(--ease), max-height .38s var(--ease), border-radius .38s var(--ease), background .25s; }
+.dock.peek { width: 480px; }
+.dock.open { width: 660px; max-height: 280px; border-radius: 20px; background: color-mix(in srgb, var(--raised) 86%, transparent); }
+.dock:has(.dock-face:focus-visible) { box-shadow: 0 0 0 3px var(--sel), var(--shadow-pop); }
+.dock-face { all: unset; box-sizing: border-box; position: relative; display: flex; align-items: center; gap: 10px; width: 100%; height: 50px; padding: 0 12px 0 11px; cursor: pointer; white-space: nowrap; }
+.dock-fl { width: 28px; height: 28px; display: grid; place-items: center; flex: none; }
+.dock-fl .fl { width: 26px; height: 26px; vertical-align: 0; transition: transform .6s var(--ease); }
+.dock.peek .dock-fl .fl, .dock.open .dock-fl .fl { transform: rotate(36deg); }
+.dock-ph { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 14.5px; color: var(--text-3); opacity: 0; transition: opacity .15s; }
+.dock-tag { flex: none; max-width: 160px; overflow: hidden; text-overflow: ellipsis; font-size: 11.5px; padding: 2px 8px; border-radius: var(--r-tag); background: var(--sel); color: var(--text-2); opacity: 0; transition: opacity .15s; }
+.dock.peek .dock-ph, .dock.peek .dock-tag { opacity: 1; transition: opacity .25s .12s; }
+.dock-dot { position: absolute; top: 10px; left: 33px; width: 7px; height: 7px; border-radius: 50%; background: var(--fl-core); }
+.dock-form { display: grid; gap: 6px; padding: 10px 12px 10px 11px; animation: in .22s var(--ease); }
+.dock-top { display: flex; align-items: center; gap: 10px; min-height: 30px; }
+.dock-data { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.dock-k { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--text-3); }
+.dock-chip { all: unset; font-size: 12.5px; padding: 3px 10px; border-radius: var(--r-tag); border: 1px solid var(--sep-2); background: var(--raised); cursor: pointer; white-space: nowrap; }
+.dock-chip:hover, .dock-chip:focus-visible { background: var(--hover); border-color: var(--sel-line); }
+.dock-form textarea { border: 0; outline: 0; resize: none; background: transparent; font: inherit; font-size: 15px; line-height: 1.45; color: var(--text); padding: 2px 4px 0 38px; min-height: 46px; }
+.dock-form .c-row { padding-left: 38px; }
+@media (max-width: 720px) { .dock.peek, .dock.open { width: calc(100% - 24px); } }
+@media (prefers-reduced-motion: reduce) { .dock, .dock-fl .fl, .dock-ph, .dock-tag { transition: none; } .dock-form { animation: none; } }

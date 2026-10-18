@@ -94,7 +94,9 @@ export type AutogateResult = { sample: string; lab: string | null; model_version
 export type Taught = { samples: number; individuals: string[] };
 export type LabJob = { id: string; lab: string; status: string; lines: string[]; error?: string;
   summary?: { version: string | null; promoted: boolean; reason: string; graduated: string[] } | null };
-export type LabVersion = { version: string; current: boolean; created?: string; notes?: string; metrics?: Record<string, unknown>; parent?: string | null };
+export type LabVersion = { version: string; current: boolean; created?: string; notes?: string; metrics?: Record<string, unknown>; parent?: string | null;
+  /** gate id -> model folder; the gates this version answers with a trained model */
+  gates?: Record<string, string>; confidence_threshold?: number };
 export type UiEvent =
   | { type: "refresh" }
   | { type: "execution"; id: string }
@@ -127,7 +129,7 @@ export type TurnEvent =
   | { type: "error"; error: string };
 
 export type Health = { status: string; llm_provider: string; model: string; llm_key: string };
-export type ModelStatus = { available: boolean; message: string; registry: boolean; train: boolean; infer: boolean };
+export type ModelStatus = { available: boolean; message: string; labs?: string[]; registry?: boolean; train?: boolean; infer?: boolean };
 
 class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }

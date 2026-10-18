@@ -1,22 +1,68 @@
-// Before there is a project: say what the experiment is for and bring its data. Three ways to bring
-// it sit side by side: drop files in, use a folder on this computer (read in place, nothing copied),
-// or pick a dataset already here. Start opens the project and, with a question, plans it at once.
+// Before there is a project: a dashboard of what is here (projects, the lab's gating models, datasets)
+// and a way to bring more data. Starting an analysis lives in the flower at the bottom (Dock): it
+// unfolds into the composer, which opens the project and, with a question, plans it at once.
 import { useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { api, type Dataset, type Rejected } from "../../api";
-import { useDatasets, useExperiments, useHealth } from "../../api/hooks";
-import { Flower, Icon } from "../../components/icons";
+import { api, type Dataset, type Experiment, type Rejected } from "../../api";
+import { useDatasets, useExperiments, useHealth, useLabModels, useModels } from "../../api/hooks";
+import { Bloom, Flower, Icon } from "../../components/icons";
 import { fmt, lastProject, ui } from "../../lib";
+import Dock, { type DockState } from "./Dock";
 
 const KIND = { example: "Example", upload: "Uploaded", folder: "On this computer" } as const;
+
+/** "today", "yesterday", "3 days ago", else the date. */
+function ago(iso?: string) {
+  if (!iso) return "";
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
+  return days <= 0 ? "today" : days === 1 ? "yesterday" : days < 14 ? `${days} days ago` : iso.slice(0, 10);
+}
+
+const folderOf = (path: string) => path.split(/[\\/]/).filter(Boolean).pop()?.replace(/[_-]+/g, " ") ?? "";
+
+function ProjectCard({ e }: { e: Experiment }) {
+  const status = e.figures ? `${e.figures} figure${e.figures === 1 ? "" : "s"}` : e.plan_kept ? "plan kept" : "not planned yet";
+  return (
+    <button className="db-proj" onClick={() => ui.openProject(e.id)}>
+      <span className={`pm-dot ${e.figures ? "fig" : e.plan_kept ? "plan" : ""}`} aria-hidden="true" />
+      <b>{e.title}</b>
+      {folderOf(e.data_path) !== e.title && <span className="db-sub">{folderOf(e.data_path)}</span>}
+      <span className="db-meta"><span>{status}</span><span>{ago(e.last_opened ?? e.created)}</span></span>
+    </button>
+  );
+}
+
+/** One lab's gating models: the version in use, what it covers, and what it has been taught. */
+function LabCard({ lab }: { lab: string }) {
+  const { data } = useLabModels(lab);
+  const versions = data?.versions ?? [];
+  const cur = versions.find((v) => v.current);
+  const gates = cur?.gates ? Object.keys(cur.gates).length : 0;
+  const taught = data?.taught;
+  return (
+    <div className="db-lab">
+      <div className="db-lab-h"><b>Lab {lab}</b>{cur && <span className="pill">{cur.version} in use</span>}</div>
+      {!data ? <span className="db-sub">Reading…</span> : (
+        <dl className="db-dl">
+          <div><dt>Gate models</dt><dd>{gates ? `${gates} trained · rest copy the template` : "template copy only"}</dd></div>
+          <div><dt>Review flag</dt><dd>{cur?.confidence_threshold != null ? `calibrated at ${cur.confidence_threshold}` : "default 0.6 (not calibrated)"}</dd></div>
+          <div><dt>Taught</dt><dd>{taught?.samples ? `${taught.samples} file${taught.samples === 1 ? "" : "s"} from ${taught.individuals.length} individual${taught.individuals.length === 1 ? "" : "s"}` : "nothing kept yet"}</dd></div>
+          <div><dt>Versions</dt><dd>{versions.length}{cur?.created ? ` · current since ${ago(cur.created)}` : ""}</dd></div>
+        </dl>
+      )}
+    </div>
+  );
+}
 
 export default function Start() {
   const qc = useQueryClient();
   const { data: datasets, isLoading } = useDatasets();
   const { data: recent = [] } = useExperiments();
   const { data: health } = useHealth();
+  const { data: models } = useModels();
   const [chosen, setChosen] = useState<Dataset | null>(null);
   const [text, setText] = useState("");
+  const [dock, setDock] = useState<DockState>("rest");
   const [busy, setBusy] = useState(false);
   const [upload, setUpload] = useState<{ share: number; names: string } | null>(null);
   const [rejected, setRejected] = useState<Rejected[]>([]);
@@ -24,10 +70,10 @@ export default function Start() {
   const [folderErr, setFolderErr] = useState("");
   const [over, setOver] = useState(false);
   const [find, setFind] = useState("");
+  const [allProjects, setAllProjects] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
-  const textBox = useRef<HTMLTextAreaElement>(null);
 
-  const choose = (d: Dataset) => { setChosen(d); textBox.current?.focus(); };
+  const choose = (d: Dataset | null) => { setChosen(d); if (d) setDock("open"); };
   const landed = async (d: Dataset) => { await qc.invalidateQueries({ queryKey: ["datasets"] }); choose(d); };
 
   const send = async (files: File[]) => {
@@ -66,46 +112,86 @@ export default function Start() {
     }
   };
 
-  const shown = useMemo(() => recent.filter((e) => e.title.toLowerCase().includes(find.trim().toLowerCase())), [recent, find]);
+  const live = useMemo(() => recent.filter((e) => !e.archived), [recent]);
+  const shown = useMemo(() => live.filter((e) => e.title.toLowerCase().includes(find.trim().toLowerCase())), [live, find]);
   // the project you had open last, one click away (the app no longer jumps into it by itself)
-  const last = recent.find((e) => e.id === lastProject() && !e.archived);
+  const last = live.find((e) => e.id === lastProject());
+  const labs = models?.labs ?? [];
+  const stats = [
+    { k: "Projects", v: live.length, s: `${live.filter((e) => e.plan_kept).length} with a kept plan` },
+    { k: "Figures", v: live.reduce((n, e) => n + (e.figures ?? 0), 0), s: "kept across projects" },
+    { k: "Datasets", v: datasets?.length ?? 0, s: `${fmt(datasets?.reduce((n, d) => n + d.files, 0) ?? 0)} FCS files` },
+    { k: "Gating labs", v: labs.length, s: models ? (models.available ? "models ready" : "models not installed") : "checking…" },
+  ];
 
   return (
-    <main className="ws-chat">
+    <main className="ws-chat start-dash">
       <div className="scroll" id="chat-scroll"><div className="thread start-page">
         <header className="st-head">
-          <h1>Start an analysis</h1>
-          <p>Say what the experiment is for and bring its data. flow-er plans the analysis from there, and nothing changes until you keep it.</p>
+          <h1>flow-er</h1>
+          <p>Your projects, the lab's gating models and the data on this computer. To start an analysis, open the flower at the bottom.</p>
         </header>
-        {last && (
-          <button className="st-continue" onClick={() => ui.openProject(last.id)}>
-            <span className="k">Continue</span><b>{last.title}</b>
-            <span className="d">{last.figures ? `${last.figures} figure${last.figures > 1 ? "s" : ""} · ` : ""}{last.created.slice(0, 10)}</span><Icon.caret />
-          </button>
-        )}
         {health && health.llm_key !== "loaded" && (
           <p className="note warn">The agent has no model key yet: set <code>OPENAI_API_KEY</code> in <code>backend/.env</code>.</p>
         )}
 
-        <form className="composer st-comp" onSubmit={(e) => { e.preventDefault(); start(); }}>
-          {chosen && (
-            <div className="c-atts"><span className="att st-data"><span className="att-k">Data</span><span className="att-n">{chosen.label}</span>
-              <span className="att-s">{chosen.files} files</span>
-              <button type="button" aria-label="Choose other data" onClick={() => setChosen(null)}>×</button></span></div>
-          )}
-          <textarea id="start-text" ref={textBox} rows={2} value={text} onChange={(e) => setText(e.target.value)}
-            placeholder="What is this experiment for? For example: how CD4 and CD8 T cells respond to stimulation"
-            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); start(); } }} aria-label="What the experiment is for" />
-          <div className="c-row">
-            <span className="st-hint">{chosen ? (text.trim() ? "Start opens the project and plans the analysis" : "Start opens the project; add a sentence and it plans too") : "Choose or bring data below"}</span>
-            <button className="btn ink" id="start-go" type="submit" disabled={!chosen || busy}>
-              {busy ? <Flower className="sm" /> : null}{text.trim() ? "Start and plan" : "Start"}
-            </button>
-          </div>
-        </form>
+        <section className="db-stats" aria-label="At a glance">
+          {stats.map((x) => <div key={x.k} className="db-stat"><span className="k">{x.k}</span><b>{fmt(x.v)}</b><span className="s">{x.s}</span></div>)}
+        </section>
+
+        {last && (
+          <button className="st-continue" onClick={() => ui.openProject(last.id)}>
+            <span className="k">Continue</span><b>{last.title}</b>
+            <span className="d">{last.figures ? `${last.figures} figure${last.figures > 1 ? "s" : ""} · ` : ""}{ago(last.last_opened ?? last.created)}</span><Icon.caret />
+          </button>
+        )}
+
+        <div className="db-cols">
+          <section className="st-sec">
+            <div className="st-h2row"><h2>Projects</h2>
+              {!!live.length && <label className="st-find"><Icon.search /><input id="start-find" value={find} onChange={(e) => setFind(e.target.value)} placeholder="Find a project" aria-label="Find a project" /></label>}
+            </div>
+            {live.length ? (
+              <div className="db-projs">
+                {(allProjects ? shown : shown.slice(0, 6)).map((e) => <ProjectCard key={e.id} e={e} />)}
+                {!shown.length && <p className="note">No project matches.</p>}
+              </div>
+            ) : <p className="note">No projects yet. Pick a dataset below and open the flower to start one.</p>}
+            {shown.length > 6 && (
+              <button className="btn sm plain db-more" onClick={() => setAllProjects(!allProjects)}>{allProjects ? "Show fewer" : `Show all ${shown.length}`}</button>
+            )}
+          </section>
+
+          <section className="st-sec">
+            <h2>Gating models</h2>
+            <div className="db-labs">
+              {labs.map((l) => <LabCard key={l} lab={l} />)}
+              {models && !labs.length && <p className="note">{models.message}</p>}
+              {!models && <span className="thinking"><Flower /><span className="shimmer">Checking the models…</span></span>}
+            </div>
+            {health && <p className="db-sub db-agent"><Bloom p={1} className="xs" /> Agent: {health.llm_key === "loaded" ? `${health.model} ready` : "no key"}</p>}
+          </section>
+        </div>
 
         <section className="st-sec">
-          <h2>Bring the data</h2>
+          <h2>Datasets</h2>
+          <div className="ds-grid">
+            {isLoading && <span className="thinking"><Flower /><span className="shimmer">Looking in DATA_DIR…</span></span>}
+            {datasets?.map((d) => (
+              <button key={d.name} data-feeds-dock className={`ds-card${chosen?.name === d.name ? " on" : ""}`} aria-pressed={chosen?.name === d.name}
+                onClick={() => choose(d)} onDoubleClick={() => start(d)} title="Choose this data; double-click to open it now">
+                <span className={`ds-kind ${d.kind}`}>{KIND[d.kind]}</span>
+                <b>{d.label}</b>
+                <span>{d.files} FCS file{d.files === 1 ? "" : "s"} · {fmt(d.size_mb, 1)} MB{d.workspace ? " · FlowJo workspace" : ""}</span>
+                {!!d.markers.length && <span className="ds-markers">{d.markers.slice(0, 10).map((m) => <i key={m}>{m}</i>)}</span>}
+              </button>
+            ))}
+            {datasets && !datasets.length && <p className="note">No datasets yet. Bring some below.</p>}
+          </div>
+        </section>
+
+        <section className="st-sec">
+          <h2>Bring data</h2>
           <div className="st-ways">
             <div className={`way drop${over ? " over" : ""}`} id="start-drop" role="button" tabIndex={0}
               onClick={() => fileInput.current?.click()} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") fileInput.current?.click(); }}
@@ -137,40 +223,9 @@ export default function Start() {
             <div className="st-rejected" role="status"><b>Not taken:</b> {rejected.map((r) => `${r.name} (${r.why})`).join("; ")}</div>
           )}
         </section>
-
-        <section className="st-sec">
-          <h2>Datasets</h2>
-          <div className="ds-grid">
-            {isLoading && <span className="thinking"><Flower /><span className="shimmer">Looking in DATA_DIR…</span></span>}
-            {datasets?.map((d) => (
-              <button key={d.name} className={`ds-card${chosen?.name === d.name ? " on" : ""}`} aria-pressed={chosen?.name === d.name}
-                onClick={() => choose(d)} onDoubleClick={() => start(d)} title="Choose this data; double-click to open it now">
-                <span className={`ds-kind ${d.kind}`}>{KIND[d.kind]}</span>
-                <b>{d.label}</b>
-                <span>{d.files} FCS file{d.files === 1 ? "" : "s"} · {fmt(d.size_mb, 1)} MB{d.workspace ? " · FlowJo workspace" : ""}</span>
-                {!!d.markers.length && <span className="ds-markers">{d.markers.slice(0, 10).map((m) => <i key={m}>{m}</i>)}</span>}
-              </button>
-            ))}
-            {datasets && !datasets.length && <p className="note">No datasets yet. Drop files above or use a folder on this computer.</p>}
-          </div>
-        </section>
-
-        {!!recent.length && (
-          <section className="st-sec">
-            <div className="st-h2row"><h2>Recent projects</h2>
-              <label className="st-find"><Icon.search /><input id="start-find" value={find} onChange={(e) => setFind(e.target.value)} placeholder="Find a project" aria-label="Find a project" /></label>
-            </div>
-            <div className="n-tree recent">
-              {shown.slice(0, 12).map((e) => (
-                <button key={e.id} className="n-row" onClick={() => ui.openProject(e.id)}>
-                  <span className="tw" /><span className="nm">{e.title}</span><span className="val">{e.created.slice(0, 10)}</span>
-                </button>
-              ))}
-              {!shown.length && <p className="note">No project matches.</p>}
-            </div>
-          </section>
-        )}
       </div></div>
+      <Dock state={dock} setState={setDock} text={text} setText={setText} chosen={chosen} setChosen={choose}
+        datasets={datasets ?? []} busy={busy} onStart={() => start()} />
     </main>
   );
 }
