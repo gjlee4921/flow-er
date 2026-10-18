@@ -4,12 +4,16 @@ add_labels: a user accepted (or corrected) the gates of one sample -> training e
   cache format (docs/cache-format.md), dataset "lab_<lab>". The sample is gated with the accepted
   polygons (cascade); each accepted gate becomes one example: parent density, accepted polygon
   as the mask, the lab template, and (cytokine gates) the donor's unstimulated well.
-  An individual is held out (role "val") when its hash falls in VAL_SHARE, so held-out
-  individuals stay held out as labels accumulate; a small lab with none in that share holds out
-  the individual with the smallest hash (assign_roles, run by retrain).
-retrain: a new version that starts from the lab's current shared model (or the base model),
-  trains on ALL the lab's examples (replay) at LR with early stopping on the held-out
-  individuals, and graduates gates with >= GRADUATE accepted samples to their own UNITO.
+  An individual is held out (role "val") when its hash falls in VAL_SHARE; a small lab with none
+  in that share holds out the newest individual nobody has trained on. Held-out individuals are
+  recorded in models/labs/<lab>/held_out.json and never switch, so every version is compared on
+  the same people and nobody already trained on becomes a held-out check (assign_roles).
+retrain: per-gate UNITO only, warm-started from the gate's model, trained on all the lab's
+  examples at LR with early stopping on the held-out individuals; gates without a model graduate
+  at >= GRADUATE accepted samples. Each gate is then answered by the best of its current model,
+  the new model and template copy on the held-out examples (choose_route): a gate on a model
+  falls back to template copy only when template copy is better by >= TEMPLATE_MARGIN_PP on
+  >= MIN_HELD_OUT examples, and its model stays on disk ("parked") for the next retrain.
   The version is promoted (made current) only if the held-out mean frequency error improves and
   no gate gets worse by more than MAX_WORSE_PP; otherwise the old version stays current.
 """
@@ -34,6 +38,9 @@ VAL_SHARE = 0.2
 GRADUATE = 15                 # accepted samples of a gate before it gets its own UNITO
 MAX_WORSE_PP = 1.0
 OUTDATED_AFTER = 3             # kept files the current version has not learned from
+TEMPLATE_MARGIN_PP = 0.5       # template copy must win by this much to replace a gate's model
+MIN_HELD_OUT = 2               # ... on at least this many held-out examples of that gate
+HELD_OUT_FILE = "held_out.json"
 
 
 def lab_dataset(lab: str) -> str:
@@ -58,13 +65,36 @@ def held_out(individuals: set[str]) -> set[str]:
     return val
 
 
+def frozen_held_out(lab: str) -> set[str]:
+    p = registry.lab_dir(lab) / HELD_OUT_FILE
+    return set(json.loads(p.read_text())["individuals"]) if p.exists() else set()
+
+
 def assign_roles(lab: str) -> set[str]:
-    """Write each lab example's role (train / val) from held_out(); returns the held-out set."""
+    """Write each lab example's role (train / val); returns the held-out set.
+
+    Held-out individuals are fixed once chosen (HELD_OUT_FILE). A newcomer, someone no version has
+    trained on, is held out when its hash is in the share; if the lab then still holds out nobody
+    and has >= 2 individuals, the newest newcomer is held out. Nobody switches later."""
     from flow_er.ml.unet import dataset as ds
 
     dataset = lab_dataset(lab)
     items = ds.select(dataset, ["train", "val"])
-    val = held_out({it.meta["individual"] for it in items})
+    first: dict[str, tuple[str, str]] = {}                 # individual -> (first accepted, sample)
+    for it in items:
+        key = (it.meta.get("accepted_at") or "", it.meta["sample"])
+        first[it.meta["individual"]] = min(first.get(it.meta["individual"], key), key)
+    trained_samples = {s for v in registry.list_versions(lab) for s in v.get("training_samples") or []}
+    trained = {it.meta["individual"] for it in items if it.meta["sample"] in trained_samples}
+    val = frozen_held_out(lab) & set(first)
+    newcomers = [p for p in first if p not in val and p not in trained]
+    val |= {p for p in newcomers if role_of(p) == "val"}
+    if not val and len(first) >= 2 and newcomers:
+        val = {max(newcomers, key=lambda p: (first[p], p))}
+    if val:
+        p = registry.lab_dir(lab) / HELD_OUT_FILE
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps({"individuals": sorted(val | frozen_held_out(lab))}, indent=1))
     for it in items:
         role = "val" if it.meta["individual"] in val else "train"
         if it.meta["roles"].get(dataset) != role:
@@ -171,6 +201,23 @@ def promotion_decision(current: dict[str, float], candidate: dict[str, float],
     return True, f"held-out mean error {cur:.3f} -> {cand:.3f} pp"
 
 
+def choose_route(new: float, current: float | None, template: float, n_held_out: int,
+                 margin: float = TEMPLATE_MARGIN_PP, min_held_out: int = MIN_HELD_OUT) -> str:
+    """Which answers a gate after retraining: "new" (the new model), "current" (its model now) or
+    "template" (template copy), from each one's held-out error (pp).
+
+    A gate answered by template copy (current None) takes the new model only if it beats template
+    copy. A gate on a model keeps the better of its current and new model, and falls back to
+    template copy only if template copy is better by >= `margin` on >= `min_held_out` examples, so
+    one odd held-out donor cannot take away a good model."""
+    if current is None:
+        return "new" if new < template else "template"
+    best, err = ("new", new) if new < current else ("current", current)
+    if n_held_out >= min_held_out and template + margin <= err:
+        return "template"
+    return best
+
+
 def _router_predict(lab: str, version: str | None):
     """The prediction the router would make for each held-out item under `version`: the gate's
     per-gate UNITO if the version has one, else template copy."""
@@ -222,11 +269,11 @@ def retrain(lab: str, gates: list[str] | None = None, lr: float = LR, patience: 
     """A new version of the lab's per-gate UNITO models; made current only if it is better.
 
     Retrains `gates` (keys or ids), or by default the gates with accepted samples the current
-    version has not seen, plus the gates below them. A gate that has a model warm-starts from it at
-    `lr`; a gate without one needs >= `graduate` accepted samples and starts fresh. A gate's new
-    model is kept only if its held-out error beats both its current model and template copy on
-    that gate (the baseline). Promotion is unchanged: the held-out mean error must improve and no
-    gate may get worse by more than MAX_WORSE_PP. No shared model is trained. `max_minutes` caps
+    version has not seen, plus the gates below them. A gate that has a model (current or parked)
+    warm-starts from it at `lr`; a gate without one needs >= `graduate` accepted samples and starts
+    fresh. Each gate is then answered by its current model, the new model or template copy, as
+    choose_route picks on the held-out examples. Promotion: the held-out mean error must improve
+    and no gate may get worse by more than MAX_WORSE_PP. No shared model is trained. `max_minutes` caps
     each gate's training; `log` receives one line per epoch (loss and held-out Dice).
 
     `on`: "cpu" trains in this process (on its CUDA GPU if it has one); "colab" sends the job to
@@ -278,35 +325,47 @@ def retrain(lab: str, gates: list[str] | None = None, lr: float = LR, patience: 
     for it in items:
         n_samples.setdefault(it.meta["gate"], set()).add(it.meta["sample_id"])
 
-    new_gates, decisions = dict(current_gates), {}
+    current_parked = {g: registry._abs(d) for g, d in (info or {}).get("parked", {}).items()}
+    new_gates, parked, decisions = dict(current_gates), dict(current_parked), {}
     template = _gates_predict("template", {})
     for gk in sorted(todo):
         gid = cache.gate_id(gk)
-        old = current_gates.get(gid)
+        old, old_parked = current_gates.get(gid), current_parked.get(gid)
+        init = old or old_parked                              # a parked model is still a start
         gate_val = [it for it in val_items if it.meta["gate"] == gk]
         if not gate_val or not any(it.meta["gate"] == gk for it in train_items):
             decisions[gk] = {"kept": False, "why": "needs accepted samples from training and held-out individuals"}
             continue
-        if old is None and len(n_samples[gk]) < graduate:
+        if init is None and len(n_samples[gk]) < graduate:
             decisions[gk] = {"kept": False, "why": f"{len(n_samples[gk])} accepted samples; a new gate needs {graduate}"}
             continue
-        arch = json.loads((old / "recipe.json").read_text())["arch"] if old else (unito_arch or unet_model.unito_arch())
-        log(f"{lab}: training {gk} ({'from its current model' if old else 'new'}, {len(n_samples[gk])} samples)")
+        arch = json.loads((init / "recipe.json").read_text())["arch"] if init else (unito_arch or unet_model.unito_arch())
+        log(f"{lab}: training {gk} ({'from its current model' if old else 'from its parked model' if init else 'new'}, "
+            f"{len(n_samples[gk])} samples)")
         out = train.train(train.Config(
             model="_candidate", arch=arch, channels=ds.UNITO_CHANNELS, gate_keys=[gk],
-            init=str(old) if old else None, out_name=f"{version}_{gid}",
-            **{**common, "lrs": (lr if old else 1e-3,)}), log=log)
+            init=str(init) if init else None, out_name=f"{version}_{gid}",
+            **{**common, "lrs": (lr if init else 1e-3,)}), log=log)
         d = vdir / "gates" / gid
         shutil.rmtree(d, ignore_errors=True)
         shutil.move(str(out), d)
         err = frequency_errors(_gates_predict(f"{lab}/{version}", {gid: d}), gate_val)[gk]
         base_err = frequency_errors(template, gate_val)[gk]
         cur_err = frequency_errors(_gates_predict(f"{lab}/{current}", {gid: old}), gate_val)[gk] if old else None
-        kept = err < base_err and (cur_err is None or err < cur_err)
-        decisions[gk] = {"kept": kept, "held_out_error_pp": err, "template_copy_pp": base_err,
-                         "current_pp": cur_err, "warm_start": old is not None}
-        if kept:
+        route = choose_route(err, cur_err, base_err, len(gate_val))
+        decisions[gk] = {"kept": route == "new", "route": route, "held_out_error_pp": err,
+                         "template_copy_pp": base_err, "current_pp": cur_err, "n_held_out": len(gate_val),
+                         "warm_start": init is not None}
+        if route == "new":
             new_gates[gid] = d
+            parked.pop(gid, None)
+        elif route == "template":                             # keep the better model on disk
+            new_gates.pop(gid, None)
+            if old is not None and cur_err <= err:
+                parked[gid] = old
+                shutil.rmtree(d)
+            else:
+                parked[gid] = d
         else:
             shutil.rmtree(d)
 
@@ -316,7 +375,7 @@ def retrain(lab: str, gates: list[str] | None = None, lr: float = LR, patience: 
     promoted, reason = promotion_decision(before, after)
     graduated = sorted(g for g, d in new_gates.items() if current_gates.get(g) != d)
     registry.register_version(
-        lab, gates=new_gates, shared=None, parent=current, version=version,
+        lab, gates=new_gates, shared=None, parent=current, version=version, parked=parked,
         metrics={"held_out_error_pp": {"current": before, "candidate": after},
                  "promoted": promoted, "reason": reason, "lr": lr, "patience": patience,
                  "gates": decisions, "accepted_samples": sorted({it.meta["sample"] for it in items}),

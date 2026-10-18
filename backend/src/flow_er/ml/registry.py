@@ -81,14 +81,18 @@ def next_version_name(lab: str) -> str:
 def register_version(lab: str, gates: dict[str, Path] | None = None, shared: Path | None = None,
                      metrics: dict | None = None, training_samples: list[str] | None = None,
                      parent: str | None = None, notes: str = "", version: str | None = None,
-                     make_current: bool = False) -> str:
-    """Write a version.json. `gates` maps gate keys (or gate ids) to per-gate model dirs."""
+                     make_current: bool = False, parked: dict[str, Path] | None = None) -> str:
+    """Write a version.json. `gates` maps gate keys (or gate ids) to per-gate model dirs.
+    `parked`: gates whose model stays on disk (a later retrain starts from it) while template copy
+    answers them, because template copy was clearly better on held-out samples."""
     version = version or next_version_name(lab)
     d = lab_dir(lab) / version
     d.mkdir(parents=True, exist_ok=True)
     gate_dirs = {(k if "__" in k else cache.gate_id(k)): _rel(v) for k, v in (gates or {}).items()}
+    parked_dirs = {(k if "__" in k else cache.gate_id(k)): _rel(v) for k, v in (parked or {}).items()}
     data = {"version": version, "created": datetime.now().isoformat(timespec="seconds"),
-            "parent": parent, "gates": gate_dirs, "shared": _rel(shared) if shared else None,
+            "parent": parent, "gates": gate_dirs, "parked": parked_dirs,
+            "shared": _rel(shared) if shared else None,
             "metrics": metrics or {}, "training_samples": training_samples or [], "notes": notes}
     (d / "version.json").write_text(json.dumps(data, indent=1))
     if make_current:

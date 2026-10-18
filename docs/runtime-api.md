@@ -116,10 +116,13 @@ models/base/shared/, .../shared/    older shared models: kept on disk, not route
 Routing per gate: the current version's per-gate UNITO → template copy. Retraining (`retrain`):
 per-gate UNITO only, for the gates with accepted samples the current version has not seen (or the
 `gates` given) plus their child gates. A gate with a model warm-starts from it at lr 1e-4 with early
-stopping (patience 40) on the held-out individuals (a fixed ~20% by hash of the individual id); a
-gate without one needs ≥ 15 accepted samples and starts fresh. A gate's new model is **kept** only
-if its held-out error beats both its current model and template copy on that gate; otherwise the
-version carries the old one. **Promote** only if the held-out mean frequency error improves and no
+stopping (patience 40) on the held-out individuals (~20% by hash of the individual id, or the
+newest untrained individual in a small lab; fixed once chosen, `models/labs/<lab>/held_out.json`); a
+gate without one needs ≥ 15 accepted samples and starts fresh. Each gate is then answered by the
+best of its current model, the new model and template copy on its held-out examples
+(`finetune.choose_route`; per-gate `route` in the summary): a gate on a model falls back to template
+copy only if template copy wins by ≥ 0.5 pp on ≥ 2 examples, and that model is kept as `parked` for
+the next retrain to start from. **Promote** only if the held-out mean frequency error improves and no
 gate is worse by more than 1 pp; the candidate is stored either way, with its metrics. With nothing
 new since the current version, `retrain` writes no version.
 

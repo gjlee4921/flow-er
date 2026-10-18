@@ -137,6 +137,57 @@ def test_small_lab_still_holds_out_one_individual():
     assert held_out({few[0]}) == set()                        # one person: nothing to hold out
 
 
+def test_choose_route_takes_the_best_and_falls_back_to_template_only_by_a_margin():
+    route = finetune.choose_route
+    assert route(new=0.03, current=11.6, template=0.03, n_held_out=3) == "new"      # a tie with template copy
+    assert route(new=3.0, current=55.0, template=0.6, n_held_out=3) == "template"   # both models far worse
+    assert route(new=3.0, current=55.0, template=0.6, n_held_out=1) == "new"        # one example: no fallback
+    assert route(new=1.0, current=0.8, template=0.5, n_held_out=5) == "current"     # within the margin
+    assert route(new=0.4, current=None, template=0.5, n_held_out=1) == "new"        # no model yet: must beat it
+    assert route(new=0.5, current=None, template=0.5, n_held_out=5) == "template"
+
+
+def _with_first_accepted(lab, order):
+    """Set each person's accepted_at so `order` is the order they were taught in."""
+    from flow_er.ml.unet import dataset as ds
+    for it in ds.select(finetune.lab_dataset(lab), ["train", "val"]):
+        it.meta["accepted_at"] = f"2026-10-18T10:00:{order.index(it.meta['individual']):02d}"
+        it.path.with_suffix(".json").write_text(json.dumps(it.meta, indent=1))
+
+
+def test_held_out_people_are_fixed_once_chosen(tmp_path):
+    val_person, a, b, c = donors(n_val=1, n_train=3)
+    _label(tmp_path, [a])
+    assert finetune.assign_roles("lab1") == set()                  # one person: nothing to hold out
+    _label(tmp_path, [b], start=1)
+    _with_first_accepted("lab1", [a, b])
+    assert finetune.assign_roles("lab1") == {b}                    # none in the share: the newest
+    registry.register_version("lab1", training_samples=["lab_lab1/" + a], make_current=True)
+    _label(tmp_path, [c], start=2)
+    _with_first_accepted("lab1", [a, b, c])
+    assert finetune.assign_roles("lab1") == {b}                    # never switches to the newer c
+    _label(tmp_path, [val_person], start=3)
+    assert finetune.assign_roles("lab1") == {b, val_person}        # newcomers in the share join
+    assert finetune.frozen_held_out("lab1") == {b, val_person}
+
+
+def test_a_gate_that_falls_back_to_template_copy_keeps_its_model_parked(tmp_path, monkeypatch):
+    _label(tmp_path, donors(n_val=1, n_train=3))
+    monkeypatch.setattr(finetune, "choose_route", lambda *a, **k: "template")
+    out = finetune.retrain("lab1", epochs=2, patience=1, unito_arch=TINY, graduate=2, log=lambda *a: None)
+    info = registry.version_info("lab1", out["version"])
+    gid = next(iter(info["parked"]))
+    assert out["gates"]["Cells"]["route"] == "template" and info["gates"] == {}
+    assert (registry._abs(info["parked"][gid]) / "model.pt").exists()
+    registry.set_current("lab1", out["version"])
+    assert registry.route("lab1", "Cells") is None                 # template copy answers the gate
+    monkeypatch.setattr(finetune, "choose_route", lambda *a, **k: "new")
+    out2 = finetune.retrain("lab1", gates=["Cells"], epochs=2, patience=1, graduate=99, log=lambda *a: None)
+    assert out2["gates"]["Cells"]["warm_start"] is True            # starts from the parked model
+    assert gid in registry.version_info("lab1", out2["version"])["gates"]
+    assert gid not in registry.version_info("lab1", out2["version"])["parked"]
+
+
 def test_lab_status_is_live_outdated_or_offline():
     from flow_er.ml import cache, images
     assert finetune.lab_status("new")["state"] == "live"          # template copy only

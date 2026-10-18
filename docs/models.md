@@ -137,12 +137,13 @@ ml.set_current("als", "v001")  # rollback
 **`add_labels`**
 - **Inputs:** the FCS file, the template, the accepted polygons in display units, and who the sample came from (`individual`).
 - **Output:** the training files it wrote. Each accepted gate becomes one example: the parent density, the accepted gate as the target, the lab template, and the unstimulated well for cytokine gates. They're stored in the cache format under `data/_cache/v1/lab_<lab>/`.
-- **Held-out individuals:** about 20% of individuals, chosen by a hash of the individual id, are never trained on. They stay held out as labels accumulate, so successive versions are compared fairly.
+- **Held-out individuals:** about 20% of individuals, chosen by a hash of the individual id, are never trained on. A small lab with nobody in that share holds out its newest individual that no version has trained on. Once chosen, held-out individuals are recorded in `models/labs/<lab>/held_out.json` and never switch, so successive versions are compared on the same people.
 
 **`retrain`** (per-gate UNITO only; no shared model is trained)
 - **Which gates:** those with accepted samples the current version has not seen (or the `gates` you name), plus every gate below them. With nothing new, no version is written.
-- **Starting point:** a gate that has a model warm-starts from it at lr 1e-4, early stopping with patience 40 on the held-out individuals' Dice. A gate without one needs ≥ 15 accepted samples and starts fresh.
-- **Per-gate rule:** a gate's new model is kept only if its held-out error beats both its current model and template copy on that gate (the baseline). Otherwise the version keeps the old model, or template copy.
+- **Starting point:** a gate that has a model (current or parked) warm-starts from it at lr 1e-4, early stopping with patience 40 on the held-out individuals' Dice. A gate without one needs ≥ 15 accepted samples and starts fresh.
+- **Per-gate rule (`choose_route`):** each gate is answered by the best of its current model, the new model and template copy on its held-out examples. A gate on template copy takes the new model only if it beats template copy. A gate on a model keeps the better of its two models, and falls back to template copy only when template copy is better by ≥ 0.5 pp on ≥ 2 held-out examples, so one odd donor cannot take away a good model. A model replaced by template copy is "parked": it stays on disk (`parked` in `version.json`) and the next retrain starts from it.
+- **Why (18 Oct, real data):** the earlier rule kept a new model only if it beat both the current model and template copy, and never fell back to template copy. Adapting the human UNITO models to mouse liver/aorta, 4 gates stayed on their starting model (TCRB- 55 pp off, template copy 0.6 pp) because their retrained models (~3 pp) did not beat template copy; on ALS a CD8 model 11.6 pp off was kept over a new one at 0.03 pp because the new one only tied template copy.
 - **Promotion (unchanged):** the new version becomes current only if the held-out mean frequency error is lower than with what the router uses now, and no gate is more than 1 pp worse. Otherwise it's stored as a candidate and the old version stays current. The code decides; nothing else does.
 - **Output:** a version folder `models/labs/<lab>/<version>/` holding the newly trained per-gate models, `version.json` (every gate's model, per-gate decisions and errors, the accepted and training sample ids, the parent version, the decision and its reason), and the `current` pointer.
 - **Speed:** warm-starting one gate on a laptop CPU takes about 5–8 min.
@@ -155,7 +156,7 @@ ml.set_current("als", "v001")  # rollback
 1. The ML packages installed: `uv sync --group ml`.
 2. A template for the lab, stored by the app.
 3. An individual id for every uploaded sample (person or animal). Without it, held-out samples could come from people who are also in training.
-4. Accepted samples from at least 2 individuals. When none of a small lab's individuals falls in the 20% share, `retrain` holds out one of them (the same one each time, chosen by hash).
+4. Accepted samples from at least 2 individuals. When none of a small lab's individuals falls in the 20% share, `retrain` holds out the newest one nobody has trained on, and keeps holding that one out.
 5. Optionally, the base model in `models/base/shared`, so a new lab starts from it instead of from ImageNet weights.
 
 ## 4. Where training runs: CPU or GPU, and Colab

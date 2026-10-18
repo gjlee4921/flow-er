@@ -122,8 +122,10 @@ so app code does not change):
 1. The router and `retrain()` no longer use the shared model (bf28e0e); `retrain` trains per-gate
    UNITO only, for the gates with new accepted samples and their child gates, warm-started at
    lr 1e-4; a new gate needs >= 15 accepted samples (7897ff0).
-2. A gate's new model is kept only if it beats both its current model and template copy on that
-   gate's held-out samples (7897ff0).
+2. Each gate is answered by the best of its current model, its new model and template copy on its
+   held-out samples; a gate falls back to template copy only when template copy wins by >= 0.5 pp
+   on >= 2 held-out samples, and its model stays parked for the next retrain. Held-out people are
+   fixed once chosen (`models/labs/<lab>/held_out.json`). See models.md, "Per-gate rule".
 3. The confidence threshold is calibrated on validation donors and stored in the version
    (fac4ad6, db2f9e7). Lab `als` v003 now uses **0.94**, from the screen 3 validation donors
    4191 and 7207: it flags all 5 gates that were off by more than 1 pp (0.6 flagged none), at the

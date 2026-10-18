@@ -473,5 +473,5 @@ def train(exp_id: str, gate: str | None) -> dict:
     store.journal(exp_id, "train_requested", {"gate": key, "lab": lab, "job": j["id"]})
     what = f"{key.split('/')[-1]} and the gates below it" if key else "every gate with new kept samples"
     return {"queued": True, "job": j["id"], "gates": [key] if key else None,
-            "message": f"Retraining {what} for lab {lab} in the background; a new model is kept only if it beats "
-                       "the current one and template copy on held-out people, and the version is used only if it is better."}
+            "message": f"Retraining {what} for lab {lab} in the background; each gate then uses the best of its current "
+                       "model, the new one and template copy on held-out people, and the version is used only if it is better."}
