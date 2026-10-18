@@ -1,12 +1,12 @@
-// The sidebar folded to a strip: home (the flow-er mark) on top, one circle per project, its flower as
-// far opened as the project has come (hover for its title and status, click to open it), + for a new
-// analysis, and you at the bottom (your own flower: settings and what flow-er remembers). On the start page it is all there is;
+// The sidebar folded to a strip: one circle per project, its flower as far opened as the project has
+// come (hover for its title and status, click to open it), + for a new analysis (it goes home with
+// the composer open), and settings at the bottom. On the start page it is all there is;
 // inside a project it unfolds into the full navigator (Rail).
 import { useState } from "react";
 import type { Experiment } from "../../api";
 import { useExperiments } from "../../api/hooks";
-import { Bloom, Icon, Mark, Me } from "../../components/icons";
-import { ago, ME, ui } from "../../lib";
+import { Bloom, Icon } from "../../components/icons";
+import { ago, ui } from "../../lib";
 
 /** How far a project has come, as a flower opening: a bud before a plan, half open with a kept plan,
  *  in full bloom once it has figures. */
@@ -35,12 +35,10 @@ export default function MiniRail({ exp }: { exp: string | null }) {
 
   return (
     <aside className="mini-rail" id="ws-rail" aria-label="Projects">
-      <button className="mr-home" aria-label="Home" title="Home: projects, datasets and the lab's models"
-        onClick={() => { setTip(null); if (exp) ui.openProject(null); }}><Mark /></button>
-      {exp && (
+      {exp && <>
         <button className="mr-ic" aria-label="Show the project's sidebar" title="Show the project's sidebar" onClick={() => ui.set({ railOpen: true })}><Icon.sidebar /></button>
-      )}
-      <span className="mr-sep" aria-hidden="true" />
+        <span className="mr-sep" aria-hidden="true" />
+      </>}
       <nav className="mr-projs" aria-label="Projects">
         {live.map((p) => (
           <button key={p.id} className={`mr-proj${p.id === exp ? " on" : ""}`}
@@ -54,8 +52,8 @@ export default function MiniRail({ exp }: { exp: string | null }) {
         <button className="mr-add" aria-label="New analysis" title="New analysis"
           onClick={() => { setTip(null); ui.openProject(null); ui.set({ dock: "open" }); }}><Icon.plus /></button>
       </nav>
-      <button className="mr-me" aria-label={`${ME.name}: settings`} title="You: settings and what flow-er remembers" onClick={() => ui.set({ settingsOpen: true })}>
-        <Me name={ME.name} square />
+      <button className="mr-gear" aria-label="Settings" title="Settings and what flow-er remembers" onClick={() => ui.set({ settingsOpen: true })}>
+        <Icon.gear />
       </button>
       {tip && (
         <div className="mr-tip" role="tooltip" style={{ top: tip.top, left: tip.left }}>

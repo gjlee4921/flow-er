@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { api, type ExperimentState, type Step } from "../../api";
 import { refresh, useAutogateFiles, useExperiment, useExperiments } from "../../api/hooks";
-import { Bloom, Flower, Icon, Mark, Me } from "../../components/icons";
+import { Bloom, Flower, Icon } from "../../components/icons";
 import { ME, ui, useUi, type Page, type Place } from "../../lib";
 
 type Lane = { id: string; n: number; title: string; page: Page; kinds: string[] };
@@ -223,8 +223,6 @@ export default function Rail({ exp }: { exp: string | null }) {
   return (
     <aside className="ws-rail" id="ws-rail" aria-label="Navigator">
       <div className="rail-top">
-        <button className="brand-me" title="Home: projects, datasets and the lab's models" aria-label="Home" onClick={() => ui.openProject(null)}>
-          <Mark /></button>
         <ProjectMenu exp={exp} title={s?.title ?? "flow-er"} sub={s ? `${s.snapshot.samples.length} files · ${s.snapshot.channels.length} channels` : "Nothing open yet"} />
         <span className="rail-acts">
           <button className="ib sm" aria-label="Start another analysis" title="Start another analysis" onClick={() => { ui.openProject(null); ui.set({ dock: "open" }); }}><Icon.plus /></button>
@@ -291,7 +289,7 @@ export default function Rail({ exp }: { exp: string | null }) {
         </div>
       )}
       <button className="rail-foot" title="Settings and what flow-er remembers" onClick={() => ui.set({ settingsOpen: true })}>
-        <Me name={ME.name} square /><span className="nm"><b>{ME.name}</b><small>Settings · what flow-er remembers</small></span>
+        <span className="rf-gear"><Icon.gear /></span><span className="nm"><b>Settings</b><small>{ME.name} · what flow-er remembers</small></span>
       </button>
     </aside>
   );

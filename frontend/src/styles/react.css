@@ -609,13 +609,10 @@ input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="r
 /* the sidebar folded to a strip: profile, one circle per project, + (MiniRail); unfolded only in a project */
 .ws.minirail .ws-body { grid-template-columns: 60px minmax(0, 1fr); }
 .mini-rail { display: flex; flex-direction: column; align-items: center; gap: 8px; min-height: 0; padding: 12px 0 14px; background: var(--sidebar); border-right: 1px solid var(--sep); }
-.mr-home { all: unset; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 11px; cursor: pointer; flex: none; }
-.mr-home .glyph { width: 30px; height: 30px; border-radius: 9px; transition: transform .15s var(--ease); }
-.mr-home .glyph .fl { width: 21px; height: 21px; }
-.mr-home:hover .glyph, .mr-home:focus-visible .glyph { transform: scale(1.06); }
-.mr-home:focus-visible { outline: 2px solid var(--fl-core); outline-offset: 1px; }
-.mr-me { all: unset; position: relative; display: grid; place-items: center; width: 40px; height: 40px; margin-top: 4px; border-radius: 12px; cursor: pointer; flex: none; transition: background .15s; }
-.mr-me:hover, .mr-me:focus-visible { background: var(--hover); outline: none; }
+.mr-gear { all: unset; flex: none; display: grid; place-items: center; width: 34px; height: 34px; margin-top: 4px; border-radius: 50%; color: var(--fl-core);
+  border: 1.5px solid color-mix(in srgb, var(--fl) 60%, transparent); background: color-mix(in srgb, var(--fl) 6%, var(--sidebar)); cursor: pointer; transition: background .15s, transform .3s var(--ease), border-color .15s; }
+.mr-gear .i { width: 18px; height: 18px; }
+.mr-gear:hover, .mr-gear:focus-visible { background: var(--sel); border-color: var(--fl-core); transform: rotate(30deg); outline: none; }
 .mr-ic { all: unset; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; color: var(--text-2); cursor: pointer; }
 .mr-ic:hover, .mr-ic:focus-visible { background: var(--hover); color: var(--text); }
 .mr-ic .i { width: 16px; height: 16px; }
@@ -685,14 +682,14 @@ button.brand-me:focus-visible { outline: 2px solid var(--fl-core); outline-offse
 .set-me .me-av { width: 40px; height: 40px; } .set-me .me-av .own { width: 34px; height: 34px; }
 
 /* you, at the bottom: your flower on a dark rounded square, a size up from the project circles */
-.me-av.sq { width: 34px; height: 34px; border-radius: 10px; background: #2a2328; box-shadow: inset 0 0 0 1px rgba(255,255,255,.06), 0 1px 3px rgba(0,0,0,.18); }
-.me-av.sq .own { width: 27px; height: 27px; }
-.mr-me:hover .me-av.sq, .mr-me:focus-visible .me-av.sq { box-shadow: 0 0 0 3px var(--sel), 0 1px 3px rgba(0,0,0,.18); }
 .ws-rail { padding-bottom: 0; }
 .rail-foot { all: unset; box-sizing: border-box; position: sticky; bottom: 0; margin: auto -8px 0; display: flex; align-items: center; gap: 10px; padding: 10px 14px 12px; border-top: 1px solid var(--sep); background: var(--sidebar); cursor: pointer; }
 .rail-foot:hover, .rail-foot:focus-visible { background: color-mix(in srgb, var(--fl) 7%, var(--sidebar)); }
-.rail-foot .me-av.sq { width: 30px; height: 30px; } .rail-foot .me-av.sq .own { width: 24px; height: 24px; }
+.rf-gear { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; flex: none; color: var(--fl-core); border: 1.5px solid color-mix(in srgb, var(--fl) 60%, transparent); background: color-mix(in srgb, var(--fl) 6%, var(--sidebar)); transition: transform .3s var(--ease); }
+.rf-gear .i { width: 16px; height: 16px; }
+.rail-foot:hover .rf-gear { transform: rotate(30deg); }
 .rail-foot .nm { display: grid; min-width: 0; line-height: 1.25; }
 .rail-foot b { font-size: 13px; font-weight: 600; }
 .rail-foot small { font-size: 11px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .set-me .me-av { border-radius: 12px; background: #2a2328; }
+.ws-rail .rail-top { grid-template-columns: minmax(0, 1fr) auto; padding-left: 10px; }
