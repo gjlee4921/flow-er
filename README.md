@@ -10,7 +10,7 @@ frontend/   React + TypeScript (Vite, pnpm)
 docs/       architecture, decisions, specs
 ```
 
-Data, trained models and experiment workspaces live outside the repo, next to it in `../data`, `../models` and `../workspaces` (override with `DATA_DIR` / `MODELS_DIR` / `WORKSPACE_DIR`, see `.env.example`).
+Data, trained models and experiment workspaces live outside the repo, next to it in `../data`, `../models` and `../workspaces` (override with `DATA_DIR` / `MODELS_DIR` / `WORKSPACE_DIR`, see `backend/.env.example`).
 
 ## Docs
 
@@ -24,7 +24,7 @@ Data, trained models and experiment workspaces live outside the repo, next to it
 ## Run (development)
 
 ```bash
-# backend: copy .env.example to backend/.env and set OPENAI_API_KEY for the agent
+# backend: copy backend/.env.example to backend/.env and set OPENAI_API_KEY for the agent
 cd backend && uv sync && uv run uvicorn flow_er.main:app --reload --app-dir src
 
 # frontend

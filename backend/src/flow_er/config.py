@@ -5,10 +5,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Data, models and workspaces live next to the repository, never inside it: <repo>/../data, ...
 _OUTSIDE_REPO = Path(__file__).resolve().parents[4]
+# backend/.env, whichever folder the app is started from
+_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=_ENV_FILE, extra="ignore")
 
     data_dir: Path = _OUTSIDE_REPO / "data"
     models_dir: Path = _OUTSIDE_REPO / "models"
