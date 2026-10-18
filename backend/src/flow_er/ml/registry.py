@@ -148,16 +148,12 @@ def _predictor(model_id: str, model_dir: Path) -> Predictor | None:
 
 
 def route(lab: str | None, gate_key: str, qc: bool = False) -> Predictor | None:
-    """The model that answers this gate, or None for template copy."""
+    """The model that answers this gate: the lab's current per-gate UNITO, or None for template
+    copy. Shared and base models stay on disk but are not routed (final decision, 18 Oct)."""
     if qc:
         return None
     gid = cache.gate_id(gate_key)
     info = version_info(lab) if lab else None
-    if info:
-        tag = f"{lab}/{info['version']}"
-        if gid in info["gates"] and (p := _predictor(f"{tag}/unito/{gid}",
-                                                     _abs(info["gates"][gid]))):
-            return p
-        if info.get("shared") and (p := _predictor(f"{tag}/shared", _abs(info["shared"]))):
-            return p
-    return _predictor("base/shared", models_root() / "base" / "shared")
+    if info and gid in info["gates"]:
+        return _predictor(f"{lab}/{info['version']}/unito/{gid}", _abs(info["gates"][gid]))
+    return None

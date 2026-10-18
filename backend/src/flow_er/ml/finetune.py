@@ -171,19 +171,18 @@ def promotion_decision(current: dict[str, float], candidate: dict[str, float],
 
 
 def _router_predict(lab: str, version: str | None):
-    """The prediction the router would make for each held-out item under `version`."""
+    """The prediction the router would make for each held-out item under `version`: the gate's
+    per-gate UNITO if the version has one, else template copy."""
+    info = registry.version_info(lab, version) if version else None
+    return _gates_predict(f"{lab}/{version}", {g: registry._abs(d) for g, d in (info or {}).get("gates", {}).items()})
+
+
+def _gates_predict(tag: str, gates: dict[str, Path]):
+    """Predict each held-out item with its gate's model in `gates` (gate id -> model folder), or
+    template copy for a gate without one."""
     def predict(item, arrays):
-        info = registry.version_info(lab, version) if version else None
         gid = item.meta["gate_id"]
-        model = None
-        if info:
-            for d in ([info["gates"].get(gid)] if info["gates"].get(gid) else []) + \
-                     ([info["shared"]] if info.get("shared") else []):
-                model = registry._predictor(f"{lab}/{version}", registry._abs(d))
-                if model:
-                    break
-        model = model or registry._predictor("base/shared",
-                                             registry.models_root() / "base" / "shared")
+        model = registry._predictor(f"{tag}/unito/{gid}", gates[gid]) if gid in gates else None
         if model is None:                                    # template copy
             return arrays["template"].astype(float)
         return model.predict(arrays["density"], arrays["template"], arrays.get("unstim"))

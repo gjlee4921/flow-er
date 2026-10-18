@@ -135,22 +135,25 @@ def tiny_model(path, channels):
 
 
 def test_router_order(tmp_path):
+    """Per-gate UNITO where the current version has one, otherwise template copy; shared and
+    base models on disk are never routed (final decision, 18 Oct)."""
     root = settings.models_dir
     assert registry.route("lab1", "Cells") is None                       # template copy
     tiny_model(root / "base" / "shared", ["density", "template", "unstim"])
-    assert registry.route("lab1", "Cells").id == "base/shared"
+    assert registry.route("lab1", "Cells") is None                       # base model unused
     shared = tiny_model(root / "elsewhere" / "ft", ["density", "template", "unstim"])
     gate = tiny_model(root / "elsewhere" / "cells", ["density"])
     v1 = registry.register_version("lab1", shared=shared, make_current=True)
-    assert registry.route("lab1", "Cells").id == f"lab1/{v1}/shared"
+    assert registry.route("lab1", "Cells") is None                       # shared model unused
     v2 = registry.register_version("lab1", gates={"Cells": gate}, shared=shared,
                                    make_current=True)
     assert registry.route("lab1", "Cells").id.startswith(f"lab1/{v2}/unito/")
-    assert registry.route("lab1", "Cells/FL1+").id == f"lab1/{v2}/shared"
+    assert registry.route("lab1", "Cells/FL1+") is None                  # no model: template
     assert registry.route("lab1", "Cells", qc=True) is None              # QC gates: template
     registry.set_current("lab1", v1)                                     # rollback
-    assert registry.route("lab1", "Cells").id == f"lab1/{v1}/shared"
+    assert registry.route("lab1", "Cells") is None
     assert [v["current"] for v in registry.list_versions("lab1")] == [True, False]
+    registry.set_current("lab1", v2)
     prob = registry.route("lab1", "Cells").predict(np.ones((101, 101)), np.zeros((101, 101)))
     assert prob.shape == (101, 101) and ((0 <= prob) & (prob <= 1)).all()
 
