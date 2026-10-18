@@ -1,2 +1,2 @@
-// Charts, robustness strip, Prism table copy.
-export {};
+// Figures the agent writes from saved tables, and the population table.
+export { Measure, Results } from "./Results";

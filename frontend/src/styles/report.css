@@ -1,0 +1,65 @@
+/* The results page as a short paper. The reading column, headings, key-number strip and figure cards
+   come from `.report` in app.css (the first mockup's styles); this adds what the live page needs:
+   the outline, bound numbers, drafts, figure actions and the data list. */
+
+/* the outline shows only when the page has room: the panel opened full width, not the side panel */
+.rp-wrap { container: rp / inline-size; }
+.rp-grid { display: grid; grid-template-columns: minmax(0, 1fr); }
+.rp-outline { display: none; }
+@container rp (min-width: 980px) {
+  .rp-grid { grid-template-columns: 132px minmax(0, 1fr); column-gap: 24px; }
+  /* a table of contents that stays in view while the page scrolls (align-self: start, or the grid
+     stretches it to the page's height and it never sticks), with the section being read marked */
+  .rp-outline { display: grid; align-content: start; align-self: start; gap: 2px; position: sticky; top: 16px; margin-top: 64px; }
+  .rp-outline a { font-size: 13.5px; color: var(--text-3); text-decoration: none; padding: 6px 10px; border-radius: 9px; transition: background .15s, color .15s; }
+  .rp-outline a:hover { background: var(--hover); color: var(--text); }
+  .rp-outline a.on { background: var(--fill); color: var(--text); }
+}
+.rp-wrap .report h1 { font-size: clamp(23px, 2.4vw, 30px); }
+
+/* a key number is a bound number too; keep it at the strip's size (`.rs span` is meant for its label) */
+.report .rs b span.bn { font-size: inherit; line-height: inherit; color: var(--text); border-bottom-width: 1px; }
+
+/* a number that points at a table cell: hover shows the table, rows and step behind it */
+.report .bn { font-weight: 600; font-variant-numeric: tabular-nums; border-bottom: 1.5px dotted color-mix(in srgb, var(--c-trt) 55%, transparent); cursor: help; }
+.report .bn:hover, .report .bn:focus-visible { background: var(--hi); border-radius: 3px; outline: none; }
+.report .bn.broken { color: var(--c-flag); border-bottom-color: var(--c-flag); font-weight: 500; }
+
+.rp-draft { font-family: var(--font); display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 9px 10px 9px 12px; border: 1px dashed var(--c-alt); border-radius: 12px; font-size: 13px; color: var(--text-2); }
+.rp-draft .row-btns { margin-left: auto; }
+.report .rfig.is-draft { border-style: dashed; border-color: var(--c-alt); }
+.report .rfig-h .n-pill { margin-left: 6px; }
+
+.rp-acts { display: inline-flex; gap: 2px; }
+.rp-acts button { all: unset; cursor: pointer; font-size: 11.5px; color: var(--text-3); padding: 3px 7px; border-radius: 6px; }
+.rp-acts button:hover, .rp-acts button[aria-expanded="true"] { background: var(--hover); color: var(--text); }
+@media (min-width: 900px) { .report .rfig.wide { margin-left: -14ch; margin-right: -14ch; } }
+.report .rfig .rp-src { color: var(--text-3); }
+.rp-rows { margin-top: 10px; max-height: 280px; overflow: auto; font-family: var(--font); }
+
+.report p.rp-method { font-size: 15px; line-height: 1.6; margin-bottom: 9px; }
+.report p.rp-small { font-family: var(--font); font-size: 13px; line-height: 1.6; color: var(--text-2); margin-top: 10px; }
+.report .rp-files { font-family: var(--font); font-size: 12.5px; }
+.report .rp-files code { font-size: 11.5px; color: var(--text-3); }
+.report h3 { font-family: var(--serif); font-size: 15px; font-weight: 600; margin: 18px 0 6px; }
+.rp-refs { font-family: var(--font); font-size: 13px; line-height: 1.55; color: var(--text-2); padding-left: 20px; margin: 0; display: grid; gap: 4px; }
+.rp-refs a { color: inherit; }
+.report .empty-in { font-family: var(--font); }
+.report .tip { font-family: var(--font); }
+
+/* the gating strategy: the data lab's plot, small and read-only, one panel per step down the tree */
+.report .rp-gs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px 14px; font-family: var(--font); }
+.report .rp-gs-panel { display: grid; gap: 4px; min-width: 0; }
+/* the lab's own sizing (a named grid area, full height) is for the lab page; here each panel is a fixed square-ish cell, as in the lab's side-by-side view */
+.report .rp-gs-panel .lab-plot { grid-area: auto; height: 240px; min-height: 0; aspect-ratio: auto; }
+.report .rp-gs-t { font-size: 12px; color: var(--text-2); line-height: 1.35; min-height: 32px; }
+.report .rp-gs-t b { display: inline-grid; place-items: center; width: 17px; height: 17px; margin-right: 4px; border-radius: 5px; background: var(--fill); font-size: 11px; color: var(--text); }
+.report .rp-gs-t span { display: block; color: var(--text-3); font-size: 11.5px; }
+.report .rp-gs-pick { font: 12px var(--font); border: 1px solid var(--sep-2); border-radius: 8px; padding: 3px 6px; background: var(--raised); }
+@container rp (min-width: 980px) { .report .rp-gs { margin-left: -14ch; margin-right: -14ch; } }
+
+/* the shared selection: what is picked out across the figures, and a way to let go */
+.rp-pick { position: sticky; top: 6px; z-index: 3; display: flex; align-items: center; gap: 8px; width: fit-content; margin: 0 0 10px; padding: 5px 6px 5px 12px; border-radius: 999px; background: var(--raised); border: 1px solid var(--sep-2); box-shadow: var(--shadow); font: 13px var(--font); color: var(--text-2); }
+.rp-pick b { color: var(--text); }
+.rp-pick button { all: unset; cursor: pointer; font-size: 12px; padding: 3px 9px; border-radius: 999px; color: var(--text-3); }
+.rp-pick button:hover { background: var(--hover); color: var(--text); }
