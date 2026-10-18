@@ -414,3 +414,13 @@ def test_image_steps_find_cd4_and_cd8_like_flowjo(exp):
                 pred = parent & in_polygon(ev[:, cols.index(x)], ev[:, cols.index(y)], render.to_lab(exp, sid, x, y, _json.loads(row["vertices"])))
                 f1s.append(2 * (pred & truth).sum() / max(1, pred.sum() + truth.sum()))
             assert max(f1s) >= 0.95, (sid, gate, max(f1s))
+
+
+def test_sheet_lists_keep_gate_names_that_hold_commas():
+    """FlowJo names gates like "Comp-LIVE_DEAD Aqua-A, SSC-A subset"; the sheet's comma-separated
+    gate and column lists still find each one whole."""
+    from flow_er.api.gates import _rejoin
+    known = {"Lymphocytes", "L/Comp-LIVE_DEAD Aqua-A, SSC-A subset", "L/Comp-LIVE_DEAD Aqua-A, SSC-A subset/CD3"}
+    asked = "Lymphocytes,L/Comp-LIVE_DEAD Aqua-A, SSC-A subset/CD3,L/Comp-LIVE_DEAD Aqua-A, SSC-A subset"
+    assert _rejoin(asked.split(","), known.__contains__) == [
+        "Lymphocytes", "L/Comp-LIVE_DEAD Aqua-A, SSC-A subset/CD3", "L/Comp-LIVE_DEAD Aqua-A, SSC-A subset"]

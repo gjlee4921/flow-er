@@ -23,6 +23,17 @@ def _sid(exp_id: str, sample: str | None) -> str:
     return sample
 
 
+def _rejoin(pieces: list[str], whole) -> list[str]:
+    """A comma-separated list put back together where its items hold commas themselves (FlowJo names
+    gates "Comp-LIVE_DEAD Aqua-A, SSC-A subset"): `whole(text)` says whether text is one item."""
+    out, i = [], 0
+    while i < len(pieces):
+        j = next((j for j in range(len(pieces), i, -1) if whole(",".join(pieces[i:j]))), i + 1)
+        out.append(",".join(pieces[i:j]))
+        i = j
+    return [x for x in out if x]
+
+
 @router.get("/experiments/{exp_id}/gates")
 def gate_tree(exp_id: str, sample: str | None = None) -> dict:
     sid = _sid(exp_id, sample)
@@ -51,11 +62,15 @@ def gate_stats(exp_id: str, gates: str = "", channels: str = "", cols: str = "")
     as a column. `gates` and `channels` are comma-separated ids (no gates means all); `cols` is
     a comma-separated list of stat:parameter[:arg], e.g. median:CD4 PE-Cy7 FLR-A,percentile:CD3 APC-H7 FLR-A:90,
     pct_of::Time/Singlets."""
-    _sid(exp_id, None)
-    keys = [g for g in gates.split(",") if g]
+    sid = _sid(exp_id, None)
+    known = {g.key for g in lab.gates(exp_id, sid)}
+    keys = _rejoin(gates.split(","), known.__contains__)
     chans = [c for c in channels.split(",") if c]
+    # a column ends where the next starts with a statistic's id; an ancestor gate's name may hold commas
+    specs = _rejoin(cols.split(","), lambda t: t.split(":", 1)[0] in toolkit.STAT_IDS and not
+                    any(p.split(":", 1)[0] in toolkit.STAT_IDS and ":" in p for p in t.split(",")[1:]))
     columns = []
-    for c in (x for x in cols.split(",") if x):
+    for c in specs:
         stat, *rest = c.split(":")
         columns.append({"stat": stat, "parameter": rest[0] if rest and rest[0] else None, "arg": rest[1] if len(rest) > 1 else None})
     try:
@@ -64,7 +79,7 @@ def gate_stats(exp_id: str, gates: str = "", channels: str = "", cols: str = "")
         raise HTTPException(400, str(e))
     names = {c["id"]: c["short"] for c in lab.dataset(exp_id).channels()}
     labels = [{"spec": spec, "label": toolkit.column_label(c["stat"], c["parameter"], c["arg"], names)}
-              for spec, c in zip((x for x in cols.split(",") if x), columns, strict=True)]
+              for spec, c in zip(specs, columns, strict=True)]
     return {"rows": rows, "columns": labels}
 
 
