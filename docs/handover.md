@@ -86,6 +86,12 @@ units (0–1, what the user sees and drags) and raw units (export). `low_confide
 "show this gate for review". `model` says which model answered: `<lab>/<version>/unito/<gate_id>`,
 `template_copy`, or `user` after an edit.
 
+In the data lab, model gates show beside FlowJo's as "<gate> (model)". When a project's files come
+from several FlowJo workspaces, or a workspace uses FlowJo's biex scale, the lab draws every file in
+the models' display (the same transform as above), so a gate means the same cells in every file and a
+model polygon needs no conversion; FlowJo's own gates are moved into it. A reviewed gate remembers
+its file (`reviewed_on`), and only that file's corrections are taught from it.
+
 Per-sample metadata the app must collect: `individual` (the person or animal the sample came from)
 and, for cytokine panels, which file is that individual's unstimulated well.
 
