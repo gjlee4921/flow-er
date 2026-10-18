@@ -68,15 +68,16 @@ def _flowjo_keys(exp_id: str) -> set[str]:
 
 def lab_for(exp_id: str) -> str | None:
     """The lab whose template names most of this experiment's FlowJo gates (at least 80% of the
-    template's gates), or None."""
+    template's gates), or None. Labs that match as well (a copy of a lab, say) are told apart by
+    having a current version, then by name, so the choice never depends on folder order."""
     keys = _flowjo_keys(exp_id)
-    best, score = None, 0.0
+    found = []
     for t in labs_root().glob("*/template.json") if keys and labs_root().exists() else []:
         names = {g["key"] for g in json.loads(t.read_text()).get("gates", [])}
         share = len(names & keys) / max(1, len(names))
-        if share >= 0.8 and share > score:
-            best, score = t.parent.name, share
-    return best
+        if share >= 0.8:
+            found.append((-share, not (t.parent / "current").exists(), t.parent.name))
+    return min(found)[2] if found else None
 
 
 def template(exp_id: str):
