@@ -168,19 +168,20 @@ benchmarks are the ALS per-donor test and the MO280 unseen-tissue test (`phase1-
 
 ## 6. Getting the trained weights into the router
 
-The GPU-trained weights are on Colab. Once they're copied into `models/`, register them (no
-copying of weights; versions point at the folders):
+The GPU-trained weights are made on Colab. Copy them into `models/` (same layout) and check them
+with `backend/scripts/check_models.py`, in this order:
 
-```python
-from flow_er.config import settings
-from flow_er.ml import registry
-import shutil
-
-m = settings.models_dir
-shutil.copytree(m / "pretrain/shared/shared", m / "base/shared")          # the base model
-gates = {p.name: p for p in (m / "als/unito_gpu").iterdir() if (p / "model.pt").exists()}
-registry.register_version("als", gates=gates, shared=m / "als/shared_finetuned/shared",
-                          notes="GPU UNITO (11 gates) + shared fine-tuned", make_current=True)
+```bash
+cd backend
+uv run python scripts/check_models.py install ~/Downloads/flower_models.zip  # copy into MODELS_DIR
+uv run python scripts/check_models.py verify       # weights present and loading for every folder
+uv run python scripts/check_models.py reproduce    # CPU predictions == the run's saved predictions
+uv run python scripts/check_models.py register     # base/shared + lab "als" new current version
+uv run python scripts/check_models.py runtime      # ALS test donors end to end vs the expert
+uv run python scripts/check_models.py finetune     # a throwaway lab fine-tuned from the base
 ```
 
+`reproduce` passes only when every per-cell probability is within 0.01 of the saved one and at
+most 0.01% of cells change side. A different model of the same gate typically differs by > 0.5
+somewhere while changing only ~0.07% of cells, so the flip share alone cannot tell weights apart.
 Lab `als` version `v001` (the 4 CPU-trained gates) stays available for rollback.
