@@ -141,7 +141,7 @@ def test_router_order(tmp_path):
     assert registry.route("lab1", "Cells").id == "base/shared"
     shared = tiny_model(root / "elsewhere" / "ft", ["density", "template", "unstim"])
     gate = tiny_model(root / "elsewhere" / "cells", ["density"])
-    v1 = registry.register_version("lab1", shared=shared)
+    v1 = registry.register_version("lab1", shared=shared, make_current=True)
     assert registry.route("lab1", "Cells").id == f"lab1/{v1}/shared"
     v2 = registry.register_version("lab1", gates={"Cells": gate}, shared=shared,
                                    make_current=True)

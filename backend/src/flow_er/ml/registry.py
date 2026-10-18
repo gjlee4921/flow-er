@@ -91,7 +91,7 @@ def register_version(lab: str, gates: dict[str, Path] | None = None, shared: Pat
             "parent": parent, "gates": gate_dirs, "shared": _rel(shared) if shared else None,
             "metrics": metrics or {}, "training_samples": training_samples or [], "notes": notes}
     (d / "version.json").write_text(json.dumps(data, indent=1))
-    if make_current or current_version(lab) is None:
+    if make_current:
         set_current(lab, version)
     return version
 

@@ -114,15 +114,16 @@ def boundary_confidence(prob: np.ndarray, px: np.ndarray) -> float | None:
 def autogate(fcs_path: str | Path, tree: GateTree, lab: str | None = None,
              comp: tuple[np.ndarray, list[str]] | None = None,
              unstim: "GatingResult | str | Path | None" = None, plot: bool = False,
-             seed: int = 0) -> GatingResult:
+             seed: int = 0, use_models: bool = True) -> GatingResult:
     """Gate every event of `fcs_path` with `tree`, routing each gate to the lab's best model.
-    `unstim`: the donor's unstimulated well (a result or an FCS path), used by cytokine gates."""
+    `unstim`: the donor's unstimulated well (a result or an FCS path), used by cytokine gates.
+    use_models=False gates with the tree's own polygons only (e.g. a user's accepted gates)."""
     fcs = FcsFile(Path(fcs_path))
     channels = tree.channels()
     comp = comp or fcs.spillover()
     values = read_values(fcs, channels, comp)
     if unstim is not None and not isinstance(unstim, GatingResult):
-        unstim = autogate(unstim, tree, lab, comp, None, False, seed)
+        unstim = autogate(unstim, tree, lab, comp, None, False, seed, use_models)
     rng = np.random.default_rng(seed)
     info = registry.version_info(lab) if lab else None
     result = GatingResult(str(fcs.path), fcs.n_events, lab, info["version"] if info else None,
@@ -140,7 +141,7 @@ def autogate(fcs_path: str | Path, tree: GateTree, lab: str | None = None,
                else rng.choice(len(cells), MAX_IMAGE_CELLS, replace=False))
         density = images.density(disp[sub])
         template = spec.template_array()
-        predictor = registry.route(lab, spec.key, spec.qc)
+        predictor = registry.route(lab, spec.key, spec.qc) if use_models else None
         if predictor is None or len(cells) == 0:
             prob, polygon, model_id = None, template if len(template) >= 3 else None, \
                 registry.TEMPLATE_COPY
