@@ -138,26 +138,32 @@ def run(exp_id: str, step: dict, samples: list[str] | None = None) -> dict:
     if op == "custom_macro":
         if not step.get("script"):
             return {"status": "blocked", "summary": "This script step has no script yet."}
-        # each input that is a table: the table its step saved when it last ran
-        plan_steps = store.state(exp_id, "plan")
-        made_by = {o: s["id"] for s in plan_steps for o in s.get("outputs", [])}
-        last = {r["step"]: r for r in store.state(exp_id, "runs")}
-        table_for = {i: last.get(made_by.get(i, ""), {}).get("table") for i in step.get("inputs", [])}
-        by_id = {s["id"]: s for s in plan_steps}
-        events_from = {}  # inputs that are another script's events: the folder it left them in
-        for i in step.get("inputs", []):
-            src = by_id.get(made_by.get(i, ""))
-            if src and src.get("op") == "render_image":
-                events_from[i] = output_folder(exp_id, src, i)
-            elif src and src.get("op") == "custom_macro" and src.get("script"):
-                outs = list(scripts.check(src["script"]["code"]).get("outputs") or {})
-                port = dict(zip(src["outputs"], outs)).get(i)
-                if port:
-                    events_from[i] = store.path(exp_id, "derived", src["id"], port)
+        table_for, events_from = script_inputs(exp_id, step)
         return scripts.run_step(exp_id, step, step["script"], table_for, samples, events_from)
     if op == "view":
         return {"status": "done", "summary": "Figures draw themselves from their table."}
     return {"status": "failed", "summary": f"No step of kind {op}."}
+
+
+def script_inputs(exp_id: str, step: dict) -> tuple[dict, dict]:
+    """What a script step reads: for each table input the table its step saved when it last ran, and
+    for each input that is another step's events or images the folder they were left in."""
+    plan_steps = store.state(exp_id, "plan")
+    made_by = {o: s["id"] for s in plan_steps for o in s.get("outputs", [])}
+    last = {r["step"]: r for r in store.state(exp_id, "runs")}
+    table_for = {i: last.get(made_by.get(i, ""), {}).get("table") for i in step.get("inputs", [])}
+    by_id = {s["id"]: s for s in plan_steps}
+    events_from = {}  # inputs that are another script's events: the folder it left them in
+    for i in step.get("inputs", []):
+        src = by_id.get(made_by.get(i, ""))
+        if src and src.get("op") == "render_image":
+            events_from[i] = output_folder(exp_id, src, i)
+        elif src and src.get("op") == "custom_macro" and src.get("script"):
+            outs = list(scripts.check(src["script"]["code"]).get("outputs") or {})
+            port = dict(zip(src["outputs"], outs)).get(i)
+            if port:
+                events_from[i] = store.path(exp_id, "derived", src["id"], port)
+    return table_for, events_from
 
 
 def output_folder(exp_id: str, step: dict, output: str):

@@ -10,13 +10,14 @@ import {
   type Edge as RFEdge, type Node as RFNode, type NodeProps,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { api, type Execution, type ExperimentState, type LabJob, type Script, type Step, type ViewSpec } from "../../api";
+import { api, type AutogateGate, type Execution, type ExperimentState, type LabJob, type SandboxOut, type SandboxTry, type Script, type Step, type ViewSpec } from "../../api";
 import {
   followRun, refresh, useAutogateFiles, useAutogateResult, useExecutions, useGates, useLabModels, useNodeTypes, useSamples, useStepImages, useStepOutput,
 } from "../../api/hooks";
 import { DensityImage } from "../../components/plots/DensityImage";
+import { densCol } from "../../components/plots/LabPlot";
 import { Flower, Icon } from "../../components/icons";
-import { clamp, fmt, gateLabel, ui, useUi } from "../../lib";
+import { clamp, css, fmt, gateLabel, shortSample, ui, useUi } from "../../lib";
 import { askInChat, sendInChat } from "../agent/Chat";
 
 const COLS = ["source", "macro", "model", "measure", "view"] as const;
@@ -139,13 +140,14 @@ function Canvas({ s }: { s: ExperimentState }) {
     const byLane: Record<number, Card[]> = {};
     for (const n of cards) (byLane[lane[n.id]] ??= []).push(n);
     if (down) {
-      // stacked: every row is one width, centred on the panel's middle; the cards of a row share it,
-      // so the rows' left and right edges line up however many cards each holds
-      const most = Math.max(1, ...Object.values(byLane).map((r) => r.length));
-      const ROW = Math.max(NW, most * 172 + (most - 1) * GAPD);
+      // stacked: each card about as wide as its title needs (within bounds), each row centred on the
+      // panel's middle; rows need not line up at the edges
+      const fit = (n: Card) => Math.round(Math.max(160, Math.min(236, 92 + n.title.length * 4.6)));
+      const rowW = (row: Card[]) => row.reduce((t, n) => t + fit(n), 0) + (row.length - 1) * GAPD;
+      const widest = Math.max(NW, ...Object.values(byLane).map(rowW));
       for (const [c, row] of Object.entries(byLane)) {
-        const cw = (ROW - (row.length - 1) * GAPD) / row.length;
-        row.forEach((n, k) => { out[n.id] = [30 + k * (cw + GAPD), 40 + Number(c) * ROWD]; w[n.id] = cw; });
+        let x = 30 + (widest - rowW(row)) / 2;
+        for (const n of row) { out[n.id] = [x, 40 + Number(c) * ROWD]; w[n.id] = fit(n); x += fit(n) + GAPD; }
       }
     } else {
       for (const [c, row] of Object.entries(byLane)) row.forEach((n, r) => { out[n.id] = [30 + Number(c) * COLW, 40 + r * ROWH]; w[n.id] = NW; });
@@ -178,7 +180,7 @@ function Canvas({ s }: { s: ExperimentState }) {
 
   // fit when the steps or the canvas change: the whole graph if it fits at a readable size, otherwise
   // a readable size that keeps the start in view (or, while the agent builds it, the newest step)
-  const layoutKey = cards.map((n) => `${n.kind}:${n.id}`).join("|");
+  const layoutKey = cards.map((n) => `${n.kind}:${n.id}:${Math.round(widths[n.id] ?? 0)}`).join("|");
   useEffect(() => {
     const { w, h } = size;
     const ids = Object.keys(pos);
@@ -445,6 +447,120 @@ function AutogatePanel({ s }: { s: ExperimentState }) {
   );
 }
 
+/** One gate as the model drew it on one file: the density it saw (101 × 101, rows = y) with its
+ *  polygon on top, pink when it is sure and orange dashed when it asks for review. */
+function GateTile({ g, onOpen }: { g: AutogateGate; onOpen: () => void }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const S = 132;
+  useEffect(() => {
+    const c = ref.current, grid = g.plot?.density;
+    if (!c) return;
+    const dpr = window.devicePixelRatio || 1;
+    c.width = S * dpr; c.height = S * dpr;
+    const ctx = c.getContext("2d")!;
+    ctx.scale(dpr, dpr);
+    ctx.fillStyle = css("--plot") || "#fff"; ctx.fillRect(0, 0, S, S);
+    if (grid?.length) {
+      const ny = grid.length, nx = grid[0].length, cw = S / nx, ch = S / ny;
+      const mx = Math.max(...grid.flat().map((v) => Math.log1p(v))) || 1;
+      for (let r = 0; r < ny; r++) for (let k = 0; k < nx; k++) {
+        const v = grid[r][k];
+        if (v) { ctx.fillStyle = densCol(Math.log1p(v) / mx); ctx.fillRect(k * cw, S - (r + 1) * ch, cw + 0.5, ch + 0.5); }
+      }
+    }
+    const poly = g.polygon?.display;
+    if (poly?.length) {
+      // display units to pixels: a pixel holds round(100 v), so v sits at the centre of pixel 100 v
+      const X = (v: number) => (Math.max(-0.01, Math.min(1.01, v)) * 100 + 0.5) * (S / 101);
+      const Y = (v: number) => S - (Math.max(-0.01, Math.min(1.01, v)) * 100 + 0.5) * (S / 101);
+      ctx.beginPath(); poly.forEach(([a, b], i) => (i ? ctx.lineTo(X(a), Y(b)) : ctx.moveTo(X(a), Y(b)))); ctx.closePath();
+      ctx.fillStyle = g.low_confidence ? "rgba(196,90,0,.08)" : "rgba(215,127,156,.12)"; ctx.fill();
+      ctx.strokeStyle = g.low_confidence ? css("--c-flag") : css("--fl-core"); ctx.lineWidth = 1.6;
+      ctx.setLineDash(g.low_confidence ? [4, 3] : []); ctx.stroke(); ctx.setLineDash([]);
+    }
+  }, [g]);
+  const name = gateLabel(g.gate.split("/").pop() ?? "");
+  return (
+    <button className={`gt${g.low_confidence ? " unsure" : ""}`} onClick={onOpen} title={`${g.gate}\nOpen it in the data lab`}>
+      <canvas ref={ref} style={{ width: S, height: S }} aria-label={`${name}: the model's gate`} />
+      <span className="gt-n">{name}</span>
+      <span className="gt-v">{g.percent_of_parent.toFixed(1)}%{g.confidence != null && <> · sure {g.confidence.toFixed(2)}</>}{g.flowjo_pct != null && <span className="gt-fj"> · FlowJo {g.flowjo_pct.toFixed(1)}%</span>}</span>
+    </button>
+  );
+}
+
+/** Live: the models at work on the data. Every gate of one file, drawn on the events it was drawn on;
+ *  during a run it follows each file as the models finish it. */
+function LiveGates({ s, running }: { s: ExperimentState; running: boolean }) {
+  const { data: files } = useAutogateFiles(s.id, true, running ? 1500 : false);
+  const [pick, setPick] = useState<string | undefined>();
+  const all = files?.files ?? [];
+  const gated = all.filter((f) => f.gated);
+  const sample = pick ?? (running ? gated.at(-1)?.sample : undefined) ?? gated[0]?.sample ?? all[0]?.sample;
+  const { data: res, isFetching } = useAutogateResult(s.id, sample);
+  const gates = (res?.gates ?? []).filter((g) => g.plot?.density?.length);
+  const open = (g: AutogateGate) => { ui.lab({ sample, parent: g.parent || null, x: g.x, y: g.y, view: "plot", mode: "density" }); ui.open("lab"); };
+  return (
+    <div className="live">
+      <div className="live-h">
+        <select className="np-file" id="live-file" value={sample ?? ""} onChange={(e) => setPick(e.target.value)} aria-label="File">
+          {all.map((f) => <option key={f.sample} value={f.sample}>{shortSample(f.sample)}{f.gated ? "" : " (not gated yet)"}</option>)}
+        </select>
+        <span className="live-p" role="status">{running && <i className="live-dot" />}{running ? "Gating" : "Gated"} {gated.length} of {all.length} files
+          {files?.lab ? <> · lab {files.lab} <b className="live-v">{files.version}</b></> : null}</span>
+        {pick && running && <button className="link" onClick={() => setPick(undefined)}>Follow the run</button>}
+      </div>
+      <div className="live-bar"><i style={{ width: `${all.length ? (100 * gated.length) / all.length : 0}%` }} /></div>
+      {isFetching && !res && <p className="np-status"><Flower className="sm" /> Gating {sample && shortSample(sample)}…</p>}
+      {!!gates.length && <div className="gt-grid">{gates.map((g) => <GateTile key={g.gate} g={g} onOpen={() => open(g)} />)}</div>}
+      <p className="small muted">Each tile is the population the model saw, on the two channels it gates, with the gate it drew: pink when sure, orange dashed when it asks for review. Click one to open it in the data lab.</p>
+    </div>
+  );
+}
+
+/** Sandbox: a script tried on one file's data, to see what it does before or without a run. Nothing it
+ *  makes is kept. */
+function ScriptSandbox({ s, step }: { s: ExperimentState; step: Step }) {
+  const [sample, setSample] = useState(s.snapshot.samples[0]?.id);
+  const [busy, setBusy] = useState(false);
+  const [res, setRes] = useState<SandboxTry | null>(null);
+  const go = async () => {
+    setBusy(true);
+    try { setRes(await api.tryStep(s.id, step.id, sample)); } catch (e) { ui.toast((e as Error).message); }
+    setBusy(false);
+  };
+  const show = (name: string, o: SandboxOut) => (
+    <div key={name} className="sb-out">
+      <b className="small">{name}</b>
+      {o.kind === "table" ? (
+        <div className="n-tblwrap np-tbl"><table className="n-tbl">
+          <thead><tr>{o.columns.slice(0, 6).map((c) => <th key={c}>{c}</th>)}</tr></thead>
+          <tbody>{o.rows.slice(0, 8).map((r, i) => <tr key={i}>{r.slice(0, 6).map((v, j) => <td key={j}>{/\.fcs$/i.test(v) ? shortSample(v) : v}</td>)}</tr>)}</tbody>
+        </table><p className="small muted">{o.for_file ? `${o.for_file} of ${o.total} rows are this file's` : `${o.total} row${o.total === 1 ? "" : "s"}`}{o.columns.length > 6 ? `, ${o.columns.length} columns` : ""}</p></div>
+      ) : <p className="small">{fmt(o.events)} events in {o.files} file{o.files === 1 ? "" : "s"}</p>}
+    </div>
+  );
+  return (
+    <div className="sandbox">
+      <div className="live-h">
+        <select className="np-file" id="sb-file" value={sample} onChange={(e) => { setSample(e.target.value); setRes(null); }} aria-label="File">
+          {s.snapshot.samples.map((x) => <option key={x.id} value={x.id}>{shortSample(x.id)}</option>)}
+        </select>
+        <button className="btn sm ink" id="sb-run" onClick={go} disabled={busy}>{busy ? <><Flower className="sm" /> Trying…</> : <><Icon.play />Try on this file</>}</button>
+      </div>
+      <p className="small muted">Runs the script on this file's data in the sandbox (no network, no other files) and shows what it reads and makes. Nothing is kept: the workflow is unchanged.</p>
+      {res?.status === "done" && (
+        <>
+          <p className="np-status"><span className="ri-st done">tried</span> in {res.seconds} s on {shortSample(res.sample)}</p>
+          {res.inputs && <div className="sb-sec"><span className="sb-k">It read</span>{Object.entries(res.inputs).map(([n, o]) => show(n, o))}</div>}
+          {res.outputs && <div className="sb-sec"><span className="sb-k">It made</span>{Object.entries(res.outputs).map(([n, o]) => show(n, o))}</div>}
+        </>
+      )}
+      {res && res.status !== "done" && <p className="np-status"><span className="ri-st failed">{res.status}</span> {res.summary}</p>}
+    </div>
+  );
+}
+
 /** A step's panel, as in n8n: what comes in, its settings, and what it made last time. */
 function NodePanel({ s, card, draft, onClose, onRun, run }: { s: ExperimentState; card: Card; draft: boolean; onClose: () => void;
   onRun: (mode: string, node: string) => void; run?: { status: string; summary?: string } }) {
@@ -454,7 +570,9 @@ function NodePanel({ s, card, draft, onClose, onRun, run }: { s: ExperimentState
   const { data: out } = useStepOutput(s.id, step.id);
   const { data: samples } = useSamples(s.id);
   const { data: gates } = useGates(s.id, s.snapshot.samples[0]?.id);
-  const [tab, setTab] = useState<"input" | "settings" | "code" | "output">(step.script && !out?.ran ? "code" : "output");
+  const [tab, setTab] = useState<"input" | "settings" | "code" | "output" | "live" | "sandbox">(step.script && !out?.ran ? "code" : "output");
+  // while the models gate the files, the Live view is the thing to watch
+  useEffect(() => { if (run?.status === "running" && step.op === "autogate") setTab("live"); }, [run?.status, step.op]);
   const type = types?.types[step.op];
   const allSteps = s.plan;
   const from = (inp: string) => allSteps.find((x) => x.outputs.includes(inp));
@@ -469,8 +587,11 @@ function NodePanel({ s, card, draft, onClose, onRun, run }: { s: ExperimentState
     <aside className="inspector node-panel node-dock" aria-label={card.title}>
       <div className="insp-h"><span className="np-t"><b>{card.title}</b><small>{type?.name ?? step.op}</small></span><button className="ib sm" aria-label="Close" onClick={onClose}><Icon.close /></button></div>
       <div className="np-tabs" role="tablist">
-        {(step.script ? (["input", "code", "output"] as const) : (["input", "settings", "output"] as const)).map((t) => (
-          <button key={t} role="tab" aria-selected={tab === t} className="np-tab" onClick={() => setTab(t)}>{{ input: "Input", settings: "Settings", code: "Code", output: "Output" }[t]}</button>
+        {(step.script ? (["input", "code", "output", "sandbox"] as const)
+          : step.op === "autogate" ? (["input", "settings", "output", "live"] as const)
+          : (["input", "settings", "output"] as const)).map((t) => (
+          <button key={t} role="tab" aria-selected={tab === t} className={`np-tab${t === "live" || t === "sandbox" ? " np-tab-live" : ""}`} id={`np-tab-${t}`} onClick={() => setTab(t)}>
+            {{ input: "Input", settings: "Settings", code: "Code", output: "Output", live: "Live", sandbox: "Sandbox" }[t]}</button>
         ))}
       </div>
       <div className="insp-b">
@@ -498,6 +619,8 @@ function NodePanel({ s, card, draft, onClose, onRun, run }: { s: ExperimentState
           ) : <p className="small muted">This step has no settings.</p>
         )}
         {tab === "code" && step.script && <ScriptView script={step.script} />}
+        {tab === "live" && <LiveGates s={s} running={run?.status === "running"} />}
+        {tab === "sandbox" && <ScriptSandbox s={s} step={step} />}
         {tab === "output" && (
           <>
             <StepImages s={s} step={step} />

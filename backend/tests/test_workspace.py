@@ -452,3 +452,23 @@ def test_lab_plots_carry_ticks_at_round_channel_values(exp):
     xt, yt = lab.axis_ticks(ds, sid, fl), lab.axis_ticks(ds, sid, "SSC-A")
     assert [t["label"] for t in xt][:3] == ["0", "10²", "10³"] and all(a["v"] < b["v"] for a, b in zip(xt, xt[1:]))
     assert yt[0]["label"] == "0" and yt[1]["label"].endswith("K") and all(0 <= t["v"] <= 1.01 for t in yt)
+
+
+@needs_data
+def test_a_script_tried_in_the_sandbox_on_one_file_keeps_nothing(exp):
+    """Sandbox: the QC script tried on one file shows the events it read and what it made, and
+    leaves the workflow's tables and runs as they were."""
+    from flow_er.api.executions import try_step
+    from flow_er.workspace import scripts
+    steps = plan.validate([{"id": "qc", "op": "custom_macro", "title": "Time QC", "inputs": ["fcs"], "outputs": ["qc_clean", "qc_qc"],
+                            "script": {"code": QC_SCRIPT, "provenance": {}}}])
+    store.set_draft(exp, "plan", steps, "a QC step")
+    store.keep(exp)
+    sid = lab.dataset(exp).sample_ids[0]
+    before = sorted(p.name for p in store.path(exp, "tables").glob("*")) if store.path(exp, "tables").exists() else []
+    r = try_step(exp, "qc", sid)
+    assert r["status"] == "done" and r["sample"] == sid
+    assert r["outputs"]["qc"]["kind"] == "table" and r["outputs"]["qc"]["total"] == 1
+    assert r["inputs"]["events"]["kind"] == "events" and r["inputs"]["events"]["files"] == 1
+    after = sorted(p.name for p in store.path(exp, "tables").glob("*")) if store.path(exp, "tables").exists() else []
+    assert after == before and not store.state(exp, "runs") and scripts.check(QC_SCRIPT)["ok"]

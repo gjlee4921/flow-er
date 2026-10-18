@@ -499,3 +499,27 @@ input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="r
 .ag-tbl th, .ag-tbl td { padding-left: 6px; padding-right: 6px; }
 .flow-split.down .inspector.node-dock { width: auto; height: min(56%, 460px); margin: 0 12px 12px; }
 .node-dock .insp-h { border-bottom: 1px solid var(--sep); }
+
+/* Live (a model step) and Sandbox (a script step): the step at work on the data */
+.np-tab-live { color: var(--fl-core); }
+.live, .sandbox { display: grid; gap: 10px; min-width: 0; }
+.live-h { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.live-p { font-size: 12.5px; color: var(--text-2); display: inline-flex; align-items: center; gap: 6px; }
+.live-v { font-weight: 600; color: var(--fl-core); }
+.live-dot { width: 7px; height: 7px; border-radius: 2px; background: var(--fl-core); animation: lspulse 1s ease-in-out infinite; }
+.live-bar { height: 4px; border-radius: 2px; background: var(--fill); overflow: hidden; }
+.live-bar i { display: block; height: 100%; background: var(--fl-core); transition: width .4s var(--ease); }
+.gt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+.gt { all: unset; display: grid; gap: 3px; justify-items: start; padding: 6px; border: 1px solid var(--sep); border-radius: var(--r-ctl); background: var(--raised); cursor: pointer; min-width: 0; transition: border-color .15s, background .15s; }
+.gt:hover { border-color: var(--sel-line); background: var(--hover); }
+.gt:focus-visible { outline: 2px solid var(--fl-core); outline-offset: 1px; }
+.gt canvas { border-radius: 6px; max-width: 100%; }
+.gt.unsure { border-color: color-mix(in srgb, var(--c-flag) 40%, var(--sep)); }
+.gt-n { font-size: 12px; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gt-v { font-size: 11px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.gt-fj { color: var(--text-3); }
+.sb-sec { display: grid; gap: 6px; }
+.sb-k { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-3); }
+.sb-out { display: grid; gap: 4px; min-width: 0; }
+/* full width, the Live view gets room for three tiles a row */
+.flow-split:not(.down) .inspector.node-dock:has(.live) { width: min(620px, 48%); }
