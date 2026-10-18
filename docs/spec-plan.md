@@ -23,7 +23,7 @@ The web app and agent live on `feat/web-agent`, which is not merged yet.
 | --- | --- | --- |
 | Chat agent | Loop on the OpenAI Responses API with 16 tools. Every change is a draft with keep/undo, and numbers come from saved tables. | Web search, memory of the user, script tools |
 | Pipeline | A plan of steps (6 ops) on a hand-made canvas; steps run one at a time | Steps don't pass data to each other. There are no triggers, no run history and no per-node output, and written macros never run. |
-| Gating models | `workspace/models.py` reports "not ready" | Waiting on `flow_er.ml` (Gijeong) |
+| Gating models | `workspace/models.py` reports "not ready" | `flow_er.ml` is ready to call (18 Oct): autogate, edits, fine-tuning and versions; see [models.md](models.md) |
 | Data lab | Real events, FlowJo gates, drawing gates, walk-through | Feeds the gating-strategy figure |
 | Results | 7 hand-written chart types over saved tables | No paper structure, no custom visuals, not publication quality |
 | Start page | Lists the folders already in `DATA_DIR` | No upload (the bug); thin |
@@ -162,6 +162,12 @@ unet.infer.place_gate(version, parent_events_2d) -> (polygon, confidence)
 baseline.place_gate(parent_events_2d, template) -> (polygon, confidence)
 ```
 
+**Status (18 Oct, Gijeong):** the API exists, with slightly different shapes. Versions are per
+lab, `train_gate` is `ml.retrain(lab, max_minutes=..., log=...)` and `place_gate` is
+`ml.autogate(fcs, template, lab)`, which gates the whole tree in one pass. The full mapping is in
+[models.md §5](models.md#5-mapping-to-the-calls-proposed-in-spec-plan-2). The JSON shapes are in
+[runtime-api.md](runtime-api.md).
+
 **Nodes:**
 
 - **Train gate model.** A long job that streams progress (epoch, loss, F1 against the baseline) and outputs a model version.
@@ -175,7 +181,7 @@ baseline.place_gate(parent_events_2d, template) -> (polygon, confidence)
 
 **Until then:** the nodes stay in the catalogue, marked "waiting on models".
 
-**Acceptance (Figshare spleen):** train on young mice, apply to aged mice. Per-gate F1 against the baseline shows on the model node and in the results.
+**Acceptance (ALS benchmark):** train on the ALS training donors, apply to the 6 locked test donors. Per-gate F1 and frequency error against the baseline show on the model node and in the results. (Changed 18 Oct: the Figshare spleen gates are one template for every mouse, so spleen is pretraining data only; see [models.md](models.md).)
 
 ---
 
@@ -479,7 +485,7 @@ BioRender is excluded: it is proprietary, and its icons cannot ship in an open-s
 
 ## Open questions
 
-- **Gijeong:** are the `ml/` calls in §2 right? When can `train_gate` and `place_gate` be called?
+- **Gijeong:** are the `ml/` calls in §2 right? When can `train_gate` and `place_gate` be called? *Answered 18 Oct: callable now; see the status note in §2 and [models.md §5](models.md#5-mapping-to-the-calls-proposed-in-spec-plan-2).*
 - **Will:**
   - Which figures does he rebuild by hand today?
   - What does a good results page look like to him?

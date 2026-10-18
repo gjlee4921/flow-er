@@ -168,8 +168,10 @@ def _router_predict(lab: str, version: str | None):
 def retrain(lab: str, lr: float = LR, patience: int = PATIENCE, epochs: int = EPOCHS,
             batch: int = 8, threads: int | None = None, graduate: int = GRADUATE,
             shared_arch: dict | None = None, unito_arch: dict | None = None,
-            log=print) -> dict:
-    """Train a new version on all the lab's examples; promote it only if it is better."""
+            max_minutes: float | None = None, log=print) -> dict:
+    """Train a new version on all the lab's examples; promote it only if it is better.
+    `max_minutes` caps each training run (the shared model and each graduated gate); `log`
+    receives progress lines (one per epoch: loss and held-out Dice)."""
     from flow_er.ml.unet import dataset as ds
     from flow_er.ml.unet import model as unet_model
     from flow_er.ml.unet import train
@@ -189,7 +191,7 @@ def retrain(lab: str, lr: float = LR, patience: int = PATIENCE, epochs: int = EP
     vdir = registry.lab_dir(lab) / version
     common = {"evaluation": evaluation, "train_roles": ("train",), "val_roles": ("val",),
               "lrs": (lr,), "batches": (batch,), "epochs": epochs, "patience": patience,
-              "threads": threads}
+              "threads": threads, "max_seconds": max_minutes * 60 if max_minutes else None}
 
     channels = ds.SHARED_CHANNELS
     arch = shared_arch or unet_model.shared_arch(len(channels), None if init else "imagenet")

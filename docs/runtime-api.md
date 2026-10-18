@@ -2,7 +2,8 @@
 
 The gating runtime is a Python library in `backend/src/flow_er/ml`. The API and worker call the
 functions below; everything they return is JSON-serialisable through `.to_json()` or plain dicts.
-Heavy calls (`autogate`, `retrain`) belong in worker jobs.
+Heavy calls (`autogate`, `retrain`) belong in worker jobs. For what the models are, how
+fine-tuning is enabled and where training runs (CPU or GPU), see [models.md](models.md).
 
 ## Python functions (`from flow_er import ml`)
 
@@ -14,7 +15,7 @@ Heavy calls (`autogate`, `retrain`) belong in worker jobs.
 | `ml.apply_edit(result, tree, gate_key, polygon_display)` | `GatingResult` | A user's edit: the gate and every gate below it are recomputed; the edited gate gets `model: "user"`. |
 | `ml.export_gatingml(result, tree, path)` | path | GatingML 2.0, polygon gates in compensated raw units with the spillover matrix included. Gate ids are XML-safe names: `[^A-Za-z0-9._-]` → `_`, duplicates get `__<parent id>`. |
 | `ml.add_labels(lab, fcs_path, tree, accepted, individual, sample_id=None, condition="", unstim=None)` | list of files | Stores the accepted gates (`{gate key: display polygon}`) of one sample as training examples. `individual` = the person or animal the sample came from; it decides the held-out share. |
-| `ml.retrain(lab)` | dict | A new model version trained on all the lab's examples; made current only if better (see below). |
+| `ml.retrain(lab, max_minutes=None, log=print)` | dict | A new model version trained on all the lab's examples; made current only if better (see below). `max_minutes` caps each training run; `log` receives one progress line per epoch. Runs on a CUDA GPU if the worker has one, else on the CPU. |
 | `ml.list_versions(lab)` | list of dicts | Every version with `metrics`, `training_samples`, `parent`, `current`. |
 | `ml.set_current(lab, version)` | — | Rollback or roll forward. |
 
@@ -101,7 +102,7 @@ models/labs/<lab>/<version>/gates/<gate_id>/   graduated per-gate UNITO models
  "shared": "labs/als/v002/shared",
  "metrics": {"held_out_error_pp": {"current": {"<gate>": 1.32}, "candidate": {"<gate>": 0.84}},
              "promoted": true, "reason": "held-out mean error 1.02 -> 0.71 pp",
-             "lr": 0.0001, "patience": 40, "held_out_individuals": ["human:3740"]},
+             "lr": 0.0001, "patience": 40, "held_out_individuals": ["donor-A"]},
  "training_samples": ["lab_als/<sample id>", "..."], "notes": "retrained from ..."}
 ```
 
