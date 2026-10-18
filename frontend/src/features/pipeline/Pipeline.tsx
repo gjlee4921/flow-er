@@ -11,7 +11,9 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { api, type Execution, type ExperimentState, type Script, type Step } from "../../api";
-import { followRun, refresh, useExecutions, useGates, useNodeTypes, useSamples, useStepImages, useStepOutput } from "../../api/hooks";
+import {
+  followRun, refresh, useAutogateFiles, useAutogateResult, useExecutions, useGates, useLabModels, useNodeTypes, useSamples, useStepImages, useStepOutput,
+} from "../../api/hooks";
 import { DensityImage } from "../../components/plots/DensityImage";
 import { Flower, Icon } from "../../components/icons";
 import { clamp, fmt, ui, useUi } from "../../lib";
@@ -301,6 +303,76 @@ function StepImages({ s, step }: { s: ExperimentState; step: Step }) {
   );
 }
 
+/** The autogate step's output: one file at a time, every gate with the model that answered, how sure
+ *  it was (unsure ones flagged for review), and FlowJo's % and an F1 where FlowJo gates exist. The
+ *  gates open in the data lab as drafts beside FlowJo's; kept ones teach the lab's next version. */
+function AutogatePanel({ s }: { s: ExperimentState }) {
+  const qc = useQueryClient();
+  const { data: files } = useAutogateFiles(s.id);
+  const [file, setFile] = useState<string | undefined>();
+  const sample = file ?? files?.files.find((f) => f.gated)?.sample ?? files?.files[0]?.sample;
+  const { data: res, isFetching } = useAutogateResult(s.id, sample);
+  const { data: lab } = useLabModels(files?.lab);
+  const short = (f: string) => f.replace(/^101_DEN084Y5_15_|_clean\.fcs$|\.fcs$/g, "");
+  const review = async () => {
+    if (!sample) return;
+    try {
+      const r = await api.autogateReview(s.id, sample);
+      await refresh(qc, s.id);
+      ui.lab({ sample: r.sample, parent: r.parent, x: r.x, y: r.y, mode: "density", view: "plot", sel: r.gate });
+      ui.open("lab");
+      ui.toast(`${r.gates.length} model gates are waiting beside FlowJo's: keep or undo them.`);
+    } catch (e) { ui.toast((e as Error).message); }
+  };
+  const teach = async () => {
+    if (!sample) return;
+    try {
+      const r = await api.autogateAccept(s.id, sample);
+      ui.toast(`Kept ${r.gates} gates as training examples for lab ${r.lab} (${r.individual}).`);
+    } catch (e) { ui.toast((e as Error).message); }
+  };
+  const gates = res?.gates ?? [];
+  const f1s = gates.map((g) => g.f1).filter((v): v is number => typeof v === "number");
+  return (
+    <div className="ag-panel">
+      <div className="ag-head">
+        {files && files.files.length > 1 && (
+          <select className="np-file" id="ag-file" value={sample} onChange={(e) => setFile(e.target.value)} aria-label="File">
+            {files.files.map((f) => <option key={f.sample} value={f.sample}>{short(f.sample)}{f.gated ? "" : " (not gated yet)"}</option>)}
+          </select>
+        )}
+        <span className="small muted">{files?.lab ? `Lab ${files.lab} · ${files.version}` : "Template copy (no lab)"}{res?.seconds ? ` · ${res.seconds} s` : ""}</span>
+      </div>
+      {isFetching && !res && <p className="np-status"><Flower className="sm" /> Gating {sample && short(sample)}…</p>}
+      {!!gates.length && (
+        <div className="n-tblwrap np-tbl"><table className="n-tbl ag-tbl">
+          <thead><tr><th>Gate</th><th>Model</th><th>Sure</th><th>%</th><th>FlowJo %</th><th>F1</th></tr></thead>
+          <tbody>{gates.map((g) => (
+            <tr key={g.gate} className={g.low_confidence ? "ag-unsure" : ""}>
+              <td title={g.gate}>{g.gate.split("/").pop()}</td>
+              <td>{g.model.includes("/unito/") ? "U-Net" : g.model === "template_copy" ? "Template" : g.model}</td>
+              <td>{g.confidence == null ? "—" : <>{g.confidence.toFixed(2)}{g.low_confidence && <span className="ag-flag" title="Review this gate">review</span>}</>}</td>
+              <td>{g.percent_of_parent.toFixed(2)}</td>
+              <td>{g.flowjo_pct == null ? "—" : g.flowjo_pct.toFixed(2)}</td>
+              <td>{g.f1 == null ? "—" : g.f1.toFixed(3)}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+        <p className="small muted">{gates.filter((g) => g.model.includes("/unito/")).length} of {gates.length} gates by a model{f1s.length ? ` · median F1 against FlowJo ${[...f1s].sort((a, b) => a - b)[Math.floor(f1s.length / 2)].toFixed(3)}` : ""}</p></div>
+      )}
+      <div className="ag-actions">
+        <button className="btn sm ink" id="ag-review" onClick={review} disabled={!gates.length}>Review in the data lab</button>
+        {files?.lab && <button className="btn sm" id="ag-teach" onClick={teach} disabled={!gates.length} title="Keep these gates as training examples for the lab's next version">Teach the models</button>}
+      </div>
+      {!!lab?.versions.length && (
+        <div className="ag-models"><b className="small">Models for lab {lab.lab}</b>
+          <ul>{lab.versions.map((v) => <li key={v.version} className={v.current ? "on" : ""}><span>{v.version}</span>{v.current && <span className="pill">current</span>}<small>{v.notes}</small></li>)}</ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** A step's panel, as in n8n: what comes in, its settings, and what it made last time. */
 function NodePanel({ s, card, draft, onClose, onRun, run }: { s: ExperimentState; card: Card; draft: boolean; onClose: () => void;
   onRun: (mode: string, node: string) => void; run?: { status: string; summary?: string } }) {
@@ -357,11 +429,12 @@ function NodePanel({ s, card, draft, onClose, onRun, run }: { s: ExperimentState
         {tab === "output" && (
           <>
             <StepImages s={s} step={step} />
+            {step.op === "autogate" && out?.ran && <AutogatePanel s={s} />}
             {run?.status === "running" ? <p className="np-status"><Flower className="sm" /> Running…</p>
               : out?.ran ? <p className="np-status"><span className={`ri-st ${run?.status ?? out.status}`}>{SAID[run?.status ?? out.status ?? ""] ?? out.status}</span> {run?.summary ?? out.summary}</p>
               : <p className="small muted">Not run yet.</p>}
             {out?.at && <p className="small muted">Last run {out.at.replace("T", " ")}{out.execution ? ` · run ${out.execution}` : ""}</p>}
-            {!!rows.length && (
+            {!!rows.length && step.op !== "autogate" && (
               <div className="n-tblwrap np-tbl"><table className="n-tbl">
                 <thead><tr>{cols.map((c) => <th key={c}>{c}</th>)}</tr></thead>
                 <tbody>{rows.slice(0, 8).map((r, i) => <tr key={i}>{cols.map((c) => <td key={c}>{typeof r[c] === "number" ? fmt(r[c], Number.isInteger(r[c]) ? 0 : 2) : String(r[c]).replace(/^101_DEN084Y5_15_|_clean\.fcs$/g, "")}</td>)}</tr>)}</tbody>

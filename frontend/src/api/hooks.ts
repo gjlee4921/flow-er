@@ -41,6 +41,12 @@ export function followRun(exp: string, id: string, qc?: QueryClient) {
 
 export const useStepImages = (id: string | null, step: string | null, file?: string, on = true) =>
   useQuery({ queryKey: ["exp", id, "images", step, file], queryFn: () => api.stepImages(id!, step!, file), enabled: !!id && !!step && on });
+export const useAutogateFiles = (id: string | null, on = true) =>
+  useQuery({ queryKey: ["exp", id, "autogate"], queryFn: () => api.autogateFiles(id!), enabled: !!id && on });
+export const useAutogateResult = (id: string | null, sample?: string) =>
+  useQuery({ queryKey: ["exp", id, "autogate", sample], queryFn: () => api.autogateResult(id!, sample!), enabled: !!id && !!sample });
+export const useLabModels = (lab?: string | null) =>
+  useQuery({ queryKey: ["lab", lab, "models"], queryFn: () => api.labModels(lab!), enabled: !!lab });
 export const useMemory = () => useQuery({ queryKey: ["memory"], queryFn: api.memory });
 export const useToolkit = () => useQuery({ queryKey: ["toolkit"], queryFn: api.toolkit, staleTime: Infinity });
 export const useStats = (id: string | null, gates: string[], cols: string[], on = true) =>

@@ -81,6 +81,14 @@ export type Execution = { id: string; trigger: string; mode: string; node: strin
 export type NodeType = { name: string; kind: string; takes: string[]; makes: string; version: string; about: string;
   params?: Record<string, { label: string; enum?: string[]; default?: string; names?: Record<string, string>; choices?: "channels" | "gates" }> };
 export type StepImage = { port: string; role: "input" | "output"; kind: string; grid: number[][]; meta: { x?: string; y?: string; parent?: string; recipe?: string; events?: number } };
+/** One file gated by the lab's models: per gate the polygon, numbers, which model answered and how sure it was. */
+export type AutogateGate = {
+  gate: string; parent: string; x: string; y: string; model: string; count: number; parent_count: number; percent_of_parent: number;
+  confidence: number | null; low_confidence: boolean; flowjo_pct?: number; f1?: number; error_pp?: number;
+  polygon: { display: number[][] | null; raw: number[][] | null }; plot?: { density: number[][] };
+};
+export type AutogateResult = { sample: string; lab: string | null; model_version: string | null; individual?: string; unstim?: string | null; seconds?: number; gates: AutogateGate[] };
+export type LabVersion = { version: string; current: boolean; created?: string; notes?: string; metrics?: Record<string, unknown>; parent?: string | null };
 export type UiEvent =
   | { type: "refresh" }
   | { type: "execution"; id: string }
@@ -205,6 +213,12 @@ export const api = {
   execution: (id: string, eid: string) => req<Execution>("GET", `/experiments/${id}/executions/${eid}`),
   stepImages: (id: string, step: string, file?: string) =>
     req<{ files: string[]; file?: string; images: StepImage[] }>("GET", `/experiments/${id}/steps/${encodeURIComponent(step)}/images${q({ file })}`),
+  autogateFiles: (id: string) => req<{ lab: string | null; version: string; files: { sample: string; gated: boolean }[] }>("GET", `/experiments/${id}/autogate`),
+  autogateResult: (id: string, sample: string) => req<AutogateResult>("GET", `/experiments/${id}/autogate/${encodeURIComponent(sample)}/result`),
+  autogateReview: (id: string, sample: string) =>
+    req<{ gates: string[]; sample: string; parent: string | null; x: string; y: string; gate: string }>("POST", `/experiments/${id}/autogate/${encodeURIComponent(sample)}/review`),
+  autogateAccept: (id: string, sample: string) => req<{ lab: string; gates: number; individual: string }>("POST", `/experiments/${id}/autogate/${encodeURIComponent(sample)}/accept`, {}),
+  labModels: (lab: string) => req<{ lab: string; versions: LabVersion[] }>("GET", `/labs/${encodeURIComponent(lab)}/models`),
   regionGates: (id: string, step: string, file?: string) =>
     req<{ gates: string[]; sample: string; parent: string; x: string; y: string }>("POST", `/experiments/${id}/steps/${encodeURIComponent(step)}/gates`, { file }),
   stepOutput: (id: string, step: string) => req<{ ran: boolean; status?: string; summary?: string; table?: string; at?: string; execution?: string; rows?: Record<string, any>[]; total_rows?: number }>("GET", `/experiments/${id}/steps/${encodeURIComponent(step)}/output`),
