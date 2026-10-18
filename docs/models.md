@@ -147,7 +147,9 @@ ml.set_current("als", "v001")  # rollback
 - **Output:** a version folder `models/labs/<lab>/<version>/` holding the newly trained per-gate models, `version.json` (every gate's model, per-gate decisions and errors, the accepted and training sample ids, the parent version, the decision and its reason), and the `current` pointer.
 - **Speed:** warm-starting one gate on a laptop CPU takes about 5–8 min.
 
-**Confidence threshold.** `scripts/calibrate_confidence.py --lab als --wells val_wells.json --write` runs the full pipeline on validation donors (never the test donors), picks the threshold that best separates gates off by more than 1 pp, reports how many wrong gates the flags catch, and stores the threshold in the current version. Autogate uses it from then on. Not run yet: the ALS validation donors (4191, 7207) are in screen 3.
+**Confidence threshold.** `scripts/calibrate_confidence.py --lab als --wells val_wells.json --write` runs the full pipeline on validation donors (never the test donors), picks the threshold that best separates gates off by more than 1 pp, reports how many wrong gates the flags catch, and stores the threshold in the current version. Autogate uses it from then on.
+
+**Calibrated for lab `als` (18 Oct, v003):** on the validation donors 4191 and 7207 (screen 3, wells C10–C12: 6 wells, 66 model-answered gates, 5 off by more than 1 pp), the old 0.6 flagged none of the wrong gates. The threshold that separates best is **0.94**: it flags all 5 wrong gates, and 27 of the 61 right ones (32 of 66 gates go to review). The trade-off, wrong caught / right flagged: 0.80 → 0/5, 5/61; 0.85 → 2/5, 7/61; 0.90 → 3/5, 20/61; 0.94 → 5/5, 27/61. Stored in `models/labs/als/v003/version.json` (`confidence_threshold`, `metrics.confidence`). Two donors is a small sample: recalibrate as validation donors accumulate.
 
 **To enable it for a lab you need:**
 1. The ML packages installed: `uv sync --group ml`.

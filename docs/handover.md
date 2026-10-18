@@ -115,8 +115,10 @@ so app code does not change):
 2. A gate's new model is kept only if it beats both its current model and template copy on that
    gate's held-out samples (7897ff0).
 3. The confidence threshold is calibrated on validation donors and stored in the version
-   (fac4ad6): run `scripts/calibrate_confidence.py --lab als --wells <val wells json> --write` on
-   the screen 3 validation donors (4191, 7207). Until then autogate uses 0.6.
+   (fac4ad6, db2f9e7). Lab `als` v003 now uses **0.94**, from the screen 3 validation donors
+   4191 and 7207: it flags all 5 gates that were off by more than 1 pp (0.6 flagged none), at the
+   cost of sending 27 of 61 right gates to review. Rerun with
+   `scripts/calibrate_confidence.py --lab als --wells <val wells json> --write`.
 4. Retraining a per-gate UNITO on a laptop CPU takes about 6–8 min per gate; it belongs in the
    worker, never in a request. `ml.retrain(lab, on="colab")` sends it to the Colab notebook through
    `COLAB_JOBS_DIR`, and `on="auto"` falls back to the CPU when the notebook is quiet (8a74dcf).
