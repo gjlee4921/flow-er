@@ -91,9 +91,12 @@ const LAB0: LabState = {
   compare: false, sheetGates: [], sheetSpec: [], sheetFilter: "", sheetSort: null, sheetColour: null, sheetChart: null, ask: false,
 };
 const saved = (() => { try { return localStorage.getItem("flower.exp"); } catch { return null; } })();
-// each project has its own link (…/#<project id>): a link or a reload opens that project, whatever
-// another tab last opened
-const linked = /^#\d{8}-[0-9a-f]{6}$/.test(location.hash) ? location.hash.slice(1) : null;
+// each project has its own link (…/#<project id>): opening or pasting one opens that project. A reload
+// keeps to the project remembered last, as before (a script that sets it and reloads lands there)
+const reloaded = (() => {
+  try { return (performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined)?.type === "reload"; } catch { return false; }
+})();
+const linked = !reloaded && /^#\d{8}-[0-9a-f]{6}$/.test(location.hash) ? location.hash.slice(1) : null;
 /** The project opened most recently, for the start page's Continue card. */
 export const lastProject = () => { try { return localStorage.getItem("flower.last"); } catch { return null; } };
 let state: UiState = {
