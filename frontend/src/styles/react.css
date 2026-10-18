@@ -609,7 +609,7 @@ input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="r
 /* the sidebar folded to a strip: profile, one circle per project, + (MiniRail); unfolded only in a project */
 .ws.minirail .ws-body { grid-template-columns: 60px minmax(0, 1fr); }
 .mini-rail { display: flex; flex-direction: column; align-items: center; gap: 8px; min-height: 0; padding: 12px 0 14px; background: var(--sidebar); border-right: 1px solid var(--sep); }
-.mr-gear { all: unset; flex: none; display: grid; place-items: center; width: 34px; height: 34px; margin-top: 4px; border-radius: 50%; color: var(--ink);
+.mr-gear { all: unset; flex: none; display: grid; place-items: center; width: 34px; height: 34px; margin-top: 4px; border-radius: 10px; color: var(--ink);
   border: 1.5px solid color-mix(in srgb, var(--fl) 60%, transparent); background: color-mix(in srgb, var(--fl) 6%, var(--sidebar)); cursor: pointer; transition: background .15s, transform .3s var(--ease), border-color .15s; }
 .mr-gear .i { width: 18px; height: 18px; }
 .mr-gear:hover, .mr-gear:focus-visible { background: var(--sel); border-color: var(--fl-core); transform: rotate(30deg); outline: none; }
@@ -685,7 +685,7 @@ button.brand-me:focus-visible { outline: 2px solid var(--fl-core); outline-offse
 .ws-rail { padding-bottom: 0; }
 .rail-foot { all: unset; box-sizing: border-box; position: sticky; bottom: 0; margin: auto -8px 0; display: flex; align-items: center; gap: 10px; padding: 10px 14px 12px; border-top: 1px solid var(--sep); background: var(--sidebar); cursor: pointer; }
 .rail-foot:hover, .rail-foot:focus-visible { background: color-mix(in srgb, var(--fl) 7%, var(--sidebar)); }
-.rf-gear { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; flex: none; color: var(--ink); border: 1.5px solid color-mix(in srgb, var(--fl) 60%, transparent); background: color-mix(in srgb, var(--fl) 6%, var(--sidebar)); transition: transform .3s var(--ease); }
+.rf-gear { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; flex: none; color: var(--ink); border: 1.5px solid color-mix(in srgb, var(--fl) 60%, transparent); background: color-mix(in srgb, var(--fl) 6%, var(--sidebar)); transition: transform .3s var(--ease); }
 .rf-gear .i { width: 16px; height: 16px; }
 .rail-foot:hover .rf-gear { transform: rotate(30deg); }
 .rail-foot .nm { display: grid; min-width: 0; line-height: 1.25; }
