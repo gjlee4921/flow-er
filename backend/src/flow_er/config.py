@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     upload_max_mb: int = 4096
     # A folder the Colab notebook also sees (Google Drive): GPU retraining jobs go through it.
     colab_jobs_dir: Path | None = None
+    # Demo only (branch demo/replay-retrain): Retrain does not train. It moves the lab to its next
+    # version, trained earlier on a GPU, and replays that version's recorded results over about
+    # `replay_seconds`. Gating stays real: each version's models run on the files as usual.
+    retrain_replay: bool = False
+    replay_seconds: float = 25
 
     @property
     def splits_dir(self) -> Path:

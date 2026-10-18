@@ -412,6 +412,9 @@ def retrain(lab: str, max_minutes: float | None = 10, gates: list[str] | None = 
     if len(people) < 2:
         raise ValueError(f"lab {lab} has kept gates from {len(people)} individual(s) ({', '.join(people) or 'none'}); "
                          "retraining compares on held-out people, so teach a file from at least one more donor first")
+    if settings.retrain_replay and not _next_version(lab):
+        raise ValueError(f"lab {lab} has no trained version after {_current_name(lab)} to move to "
+                         "(replay mode: put the pre-trained versions in models/labs/<lab>/ first)")
     jid = time.strftime("%H%M%S") + "-" + uuid.uuid4().hex[:4]
     job = {"id": jid, "kind": "retrain", "lab": lab, "gates": gates, "status": "running", "started": store.now(), "lines": [], "summary": None}
     with _lock:
@@ -419,8 +422,9 @@ def retrain(lab: str, max_minutes: float | None = 10, gates: list[str] | None = 
 
     def work():
         try:
-            job["summary"] = _ml().retrain(lab, gates=gates, max_minutes=max_minutes, on="auto",
-                                           log=lambda line: job["lines"].append(str(line)))
+            say = lambda line: job["lines"].append(str(line))
+            job["summary"] = (_replay(lab, say) if settings.retrain_replay else
+                              _ml().retrain(lab, gates=gates, max_minutes=max_minutes, on="auto", log=say))
             job["status"] = "done"
         except Exception as e:
             log.exception("retrain %s failed", lab)
@@ -429,6 +433,47 @@ def retrain(lab: str, max_minutes: float | None = 10, gates: list[str] | None = 
 
     threading.Thread(target=work, daemon=True).start()
     return job
+
+
+def _current_name(lab: str) -> str | None:
+    return next((v["version"] for v in versions(lab) if v.get("current")), None)
+
+
+def _next_version(lab: str) -> dict | None:
+    """The lab's version after the current one (oldest first), if one was trained already."""
+    vs = versions(lab)
+    at = next((i for i, v in enumerate(vs) if v.get("current")), None)
+    return vs[at + 1] if at is not None and at + 1 < len(vs) else None
+
+
+def _replay(lab: str, say) -> dict:
+    """Demo only: a retrain that was run earlier, told again. The next version's own record (each gate's
+    held-out error, the route it took, the verdict) is reported line by line over about
+    `settings.replay_seconds`; the version becomes current only if that run promoted it. Nothing is trained."""
+    nxt = _next_version(lab)
+    m = nxt.get("metrics") or {}
+    decisions = m.get("gates") or {}
+    pace = settings.replay_seconds / max(1, len(decisions) + 2)
+    say(f"{lab}: retraining from {_current_name(lab)} on the kept gates ({len(decisions)} gate(s))")
+    time.sleep(pace)
+    route = {"new": "the new model", "current": "kept its current model", "template": "template copy"}
+    for g, d in decisions.items():
+        say(f"{lab}: training {g.split('/')[-1]}")
+        time.sleep(pace)
+        err, base, cur = d.get("held_out_error_pp"), d.get("template_copy_pp"), d.get("current_pp")
+        nums = ", ".join(x for x in (f"new {err:.2f} pp" if err is not None else "",
+                                     f"current {cur:.2f} pp" if cur is not None else "",
+                                     f"template copy {base:.2f} pp" if base is not None else "") if x)
+        say(f"{lab}: {g.split('/')[-1]}: {nums} on {d.get('n_held_out', '?')} held-out → {route.get(d.get('route'), d.get('route', '?'))}")
+    promoted = bool(m.get("promoted", True))
+    reason = m.get("reason") or nxt.get("notes") or f"{nxt['version']} was trained earlier"
+    if promoted:
+        _ml().set_current(lab, nxt["version"])
+    say(f"{lab}: {nxt['version']} {'promoted' if promoted else 'kept as candidate'}: {reason}")
+    held = m.get("held_out_error_pp") or {}
+    return {"version": nxt["version"], "promoted": promoted, "reason": reason, "replayed": True,
+            "graduated": sorted(g for g, d in decisions.items() if d.get("route") == "new"),
+            "gates": decisions, "metrics": {"current": held.get("current"), "candidate": held.get("candidate")}}
 
 
 def job(jid: str) -> dict | None:

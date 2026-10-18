@@ -120,3 +120,35 @@ def test_organ_and_mouse_come_from_tissue_file_names_and_a_samples_sheet_adds_th
     assert rows["Spleen_3.fcs"]["individual"] == "mouse 3" and rows["Bone marrow_12.fcs"]["organ"] == "bone marrow"
     (tmp_path / "samples.csv").write_text("Sample,Mouse,Tissue,Diet\nAorta_3.fcs,mouse 3,aorta,western diet\n")
     assert samplemeta.sheet(tmp_path) == {"Aorta_3.fcs": {"individual": "mouse 3", "organ": "aorta", "condition": "western diet"}}
+
+
+def test_replay_mode_moves_the_lab_to_its_next_trained_version_and_reports_its_record(tmp_path, monkeypatch):
+    """Demo branch: Retrain trains nothing; it moves to the version trained earlier and tells its results."""
+    import json, time
+    from flow_er.config import settings
+    from flow_er.workspace import models
+    lab = tmp_path / "labs" / "mo280"
+    for v, metrics in [("v001", {}), ("v002", {"promoted": True, "reason": "held-out mean error 24.9 -> 2.2 pp",
+                                              "held_out_error_pp": {"current": {"CD45+": 17.4}, "candidate": {"CD45+": 3.1}},
+                                              "gates": {"CD45+": {"route": "new", "held_out_error_pp": 3.1, "template_copy_pp": 17.4,
+                                                                  "current_pp": 46.9, "n_held_out": 2}}})]:
+        (lab / v).mkdir(parents=True)
+        (lab / v / "version.json").write_text(json.dumps({"version": v, "gates": {}, "metrics": metrics}))
+    (lab / "current").write_text("v001")
+    monkeypatch.setenv("MODELS_DIR", str(tmp_path))
+    monkeypatch.setattr(settings, "models_dir", tmp_path)
+    monkeypatch.setattr(settings, "retrain_replay", True)
+    monkeypatch.setattr(settings, "replay_seconds", 0)
+    monkeypatch.setattr(models, "taught", lambda lab: {"samples": 4, "individuals": ["mouse 1", "mouse 3"]})
+    j = models.retrain("mo280")
+    for _ in range(100):
+        if models.job(j["id"])["status"] != "running":
+            break
+        time.sleep(0.05)
+    j = models.job(j["id"])
+    assert j["status"] == "done" and j["summary"]["replayed"] and j["summary"]["version"] == "v002"
+    assert (lab / "current").read_text() == "v002"
+    assert any("CD45+: new 3.10 pp, current 46.90 pp, template copy 17.40 pp" in line for line in j["lines"])
+    import pytest
+    with pytest.raises(ValueError, match="no trained version after v002"):
+        models.retrain("mo280")
