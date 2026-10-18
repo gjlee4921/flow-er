@@ -77,29 +77,54 @@ def test_add_labels_writes_cache_examples(tmp_path):
     assert (z["cell_label"] == inside(accepted["Cells"], disp)).mean() > 0.97
 
 
-def test_retrain_promotes_or_keeps_and_rolls_back(tmp_path):
-    for i, name in enumerate(donors(n_val=1, n_train=3)):
+def _label(tmp_path, names, start=0):
+    for i, name in enumerate(names, start):
         shift = 25_000 + 2_000 * i                     # every donor drifted right of the template
         f = donor_fcs(tmp_path / f"{name}.fcs", shift)
         accepted = {"Cells": np.array(box(0.2 + shift / 262144, 0.42 + shift / 262144,
                                           0.05, 0.25))}
         finetune.add_labels("lab1", f, TREE, accepted, name, name)
-    out = finetune.retrain("lab1", epochs=3, patience=2, shared_arch={**TINY, "in_channels": 3},
-                           unito_arch=TINY, graduate=3, log=lambda *a: None)
-    versions = registry.list_versions("lab1")
-    assert [v["version"] for v in versions] == [out["version"]]
-    v = versions[0]
+
+
+def test_retrain_trains_per_gate_unito_only_and_rolls_back(tmp_path):
+    people = donors(n_val=1, n_train=4)
+    _label(tmp_path, people[:4])
+    # a gate without a model needs `graduate` accepted samples before it gets one
+    out = finetune.retrain("lab1", epochs=3, patience=2, unito_arch=TINY, graduate=99, log=lambda *a: None)
+    assert out["gates"]["Cells"]["kept"] is False and "needs 99" in out["gates"]["Cells"]["why"]
+    out = finetune.retrain("lab1", epochs=3, patience=2, unito_arch=TINY, graduate=3, log=lambda *a: None)
+    v = {x["version"]: x for x in registry.list_versions("lab1")}[out["version"]]
+    assert v["shared"] is None                             # no shared model is trained
     assert v["metrics"]["promoted"] == out["promoted"] and v["training_samples"]
-    assert "Cells" in out["metrics"]["current"]           # compared against template copy
+    d = out["gates"]["Cells"]
+    assert "template_copy_pp" in d and d["warm_start"] is False
+    assert d["kept"] == (d["held_out_error_pp"] < d["template_copy_pp"])   # must beat the baseline
     assert v["current"] == out["promoted"]
+    if out["promoted"] and d["kept"]:
+        assert registry.route("lab1", "Cells").id.startswith(f"lab1/{out['version']}/unito/")
+    # nothing new since the current version: nothing to retrain, no version written
+    n = len(registry.list_versions("lab1"))
     if out["promoted"]:
-        assert registry.route("lab1", "Cells").id.startswith(f"lab1/{out['version']}")
-    # a second retrain starts from the first version's shared model (if it was promoted)
-    out2 = finetune.retrain("lab1", epochs=2, patience=1, shared_arch={**TINY, "in_channels": 3},
-                            unito_arch=TINY, graduate=99, log=lambda *a: None)
-    assert out2["version"] == "v002" and out2["graduated"] == []
-    registry.set_current("lab1", "v001")                  # rollback
-    assert registry.current_version("lab1") == "v001"
+        again = finetune.retrain("lab1", epochs=2, patience=1, unito_arch=TINY, graduate=3, log=lambda *a: None)
+        assert again["version"] is None and len(registry.list_versions("lab1")) == n
+    # a new donor's labels: only that gate (and those below it) is retrained, warm-started
+    _label(tmp_path, people[4:], start=4)
+    out3 = finetune.retrain("lab1", epochs=2, patience=1, unito_arch=TINY, graduate=3, log=lambda *a: None)
+    assert set(out3["gates"]) == {"Cells"}
+    if out["promoted"] and d["kept"]:
+        assert out3["gates"]["Cells"]["warm_start"] is True
+    registry.set_current("lab1", out["version"])           # rollback
+    assert registry.current_version("lab1") == out["version"]
+
+
+def test_gates_to_retrain_follows_new_samples_and_children():
+    from types import SimpleNamespace as N
+    it = lambda g, p, s: N(meta={"gate": g, "parent": p, "sample": s})
+    items = [it("A", None, "s1"), it("A/B", "A", "s1"), it("A/B/C", "A/B", "s1"), it("D", None, "s1"),
+             it("A/B", "A", "s2")]
+    assert finetune.gates_to_retrain(items, {"s1"}) == {"A/B", "A/B/C"}        # s2 is new for A/B
+    assert finetune.gates_to_retrain(items, {"s1", "s2"}) == set()
+    assert finetune.gates_to_retrain(items, {"s1", "s2"}, gates=["D"]) == {"D"}
 
 
 def test_small_lab_still_holds_out_one_individual():

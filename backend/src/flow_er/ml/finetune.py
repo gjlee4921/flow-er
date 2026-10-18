@@ -192,13 +192,40 @@ def _gates_predict(tag: str, gates: dict[str, Path]):
 # --- retraining -----------------------------------------------------------------------------------
 
 
-def retrain(lab: str, lr: float = LR, patience: int = PATIENCE, epochs: int = EPOCHS,
-            batch: int = 8, threads: int | None = None, graduate: int = GRADUATE,
-            shared_arch: dict | None = None, unito_arch: dict | None = None,
+def gates_to_retrain(items, trained_on: set[str], gates: list[str] | None = None) -> set[str]:
+    """The gate keys a retrain covers: `gates` (keys or gate ids) if given, else every gate with an
+    accepted sample the current version has not seen; plus every gate below those."""
+    keys = {it.meta["gate"] for it in items}
+    if gates:
+        by_id = {cache.gate_id(k): k for k in keys}
+        todo = {g if g in keys else by_id[g] for g in gates if g in keys or g in by_id}
+    else:
+        todo = {it.meta["gate"] for it in items if it.meta["sample"] not in trained_on}
+    children: dict[str, set[str]] = {}
+    for it in items:
+        children.setdefault(it.meta.get("parent") or "", set()).add(it.meta["gate"])
+    stack = list(todo)
+    while stack:
+        for c in children.get(stack.pop(), ()):
+            if c not in todo:
+                todo.add(c)
+                stack.append(c)
+    return todo
+
+
+def retrain(lab: str, gates: list[str] | None = None, lr: float = LR, patience: int = PATIENCE,
+            epochs: int = EPOCHS, batch: int = 8, threads: int | None = None,
+            graduate: int = GRADUATE, unito_arch: dict | None = None,
             max_minutes: float | None = None, log=print) -> dict:
-    """Train a new version on all the lab's examples; promote it only if it is better.
-    `max_minutes` caps each training run (the shared model and each graduated gate); `log`
-    receives progress lines (one per epoch: loss and held-out Dice)."""
+    """A new version of the lab's per-gate UNITO models; made current only if it is better.
+
+    Retrains `gates` (keys or ids), or by default the gates with accepted samples the current
+    version has not seen, plus the gates below them. A gate that has a model warm-starts from it at
+    `lr`; a gate without one needs >= `graduate` accepted samples and starts fresh. A gate's new
+    model is kept only if its held-out error beats both its current model and template copy on
+    that gate (the baseline). Promotion is unchanged: the held-out mean error must improve and no
+    gate may get worse by more than MAX_WORSE_PP. No shared model is trained. `max_minutes` caps
+    each gate's training; `log` receives one line per epoch (loss and held-out Dice)."""
     from flow_er.ml.unet import dataset as ds
     from flow_er.ml.unet import model as unet_model
     from flow_er.ml.unet import train
@@ -210,77 +237,75 @@ def retrain(lab: str, lr: float = LR, patience: int = PATIENCE, epochs: int = EP
     if not train_items or not val_items:
         raise ValueError(f"lab {lab!r}: {len(train_items)} training and {len(val_items)} held-out "
                          "examples; retraining needs accepted samples from at least 2 individuals")
+    items = train_items + val_items
     current = registry.current_version(lab)
     info = registry.version_info(lab) if current else None
-    base = registry.models_root() / "base" / "shared"
-    init = (registry._abs(info["shared"]) if info and info.get("shared") else
-            base if (base / "model.pt").exists() else None)
+    current_gates = {g: registry._abs(d) for g, d in (info or {}).get("gates", {}).items()}
+    seen = set((info or {}).get("metrics", {}).get("accepted_samples") or (info or {}).get("training_samples") or [])
+    todo = gates_to_retrain(items, seen, gates)
+    if not todo:
+        reason = f"no accepted samples since {current}" if current else "nothing to retrain"
+        log(f"{lab}: {reason}")
+        return {"version": None, "promoted": False, "reason": reason, "graduated": [], "gates": {},
+                "metrics": {}}
     version = registry.next_version_name(lab)
     vdir = registry.lab_dir(lab) / version
     common = {"evaluation": evaluation, "train_roles": ("train",), "val_roles": ("val",),
-              "lrs": (lr,), "batches": (batch,), "epochs": epochs, "patience": patience,
-              "threads": threads, "max_seconds": max_minutes * 60 if max_minutes else None}
-
-    channels = ds.SHARED_CHANNELS
-    arch = shared_arch or unet_model.shared_arch(len(channels), None if init else "imagenet")
-    if init:      # fine-tune: the starting model's architecture; its weights come from model.pt
-        arch = {**json.loads((Path(init) / "recipe.json").read_text())["arch"],
-                "encoder_weights": None}
-    out = train.train(train.Config(model="_candidate", arch=arch, channels=channels,
-                                   init=str(init) if init else None, augment=ds.Augment(),
-                                   out_name=version, **common), log=log)
-    shared_dir = vdir / "shared"
-    shutil.rmtree(shared_dir, ignore_errors=True)
-    shutil.move(str(out), shared_dir)
-
-    # Graduation: gates with enough accepted samples also get their own UNITO.
-    n_samples = {}
-    for it in train_items + val_items:
+              "batches": (batch,), "epochs": epochs, "patience": patience, "threads": threads,
+              "max_seconds": max_minutes * 60 if max_minutes else None}
+    n_samples: dict[str, set[str]] = {}
+    for it in items:
         n_samples.setdefault(it.meta["gate"], set()).add(it.meta["sample_id"])
-    gate_dirs = {}
-    for gk, samples in sorted(n_samples.items()):
-        if len(samples) < graduate or not any(it.meta["gate"] == gk for it in val_items):
-            continue
-        gid = cache.gate_id(gk)
-        old = registry._abs(info["gates"][gid]) if info and gid in info["gates"] else None
-        out = train.train(train.Config(
-            model="_candidate", arch=unito_arch or unet_model.unito_arch(),
-            channels=ds.UNITO_CHANNELS, gate_keys=[gk], init=str(old) if old else None,
-            out_name=f"{version}_{gid}", **{**common, "lrs": (lr if old else 1e-3,)}), log=log)
-        gate_dirs[gid] = vdir / "gates" / gid
-        shutil.rmtree(gate_dirs[gid], ignore_errors=True)
-        shutil.move(str(out), gate_dirs[gid])
 
-    # Held-out comparison: the router's answer now vs the candidate's.
-    before = frequency_errors(_router_predict(lab, current), val_items)
-    shared_pred = registry.Predictor(f"{lab}/{version}/shared", shared_dir)
-    cand_shared = frequency_errors(
-        lambda it, a: shared_pred.predict(a["density"], a["template"], a.get("unstim")),
-        val_items)
-    keep = {}
-    for gid, d in gate_dirs.items():
-        p = registry.Predictor(f"{lab}/{version}/unito/{gid}", d)
-        gate_items = [it for it in val_items if it.meta["gate_id"] == gid]
-        err = frequency_errors(lambda it, a, p=p: p.predict(a["density"], a["template"]),
-                               gate_items)
-        gk = gate_items[0].meta["gate"]
-        if err[gk] <= cand_shared.get(gk, np.inf):
-            keep[gid] = d
-            cand_shared[gk] = err[gk]
+    new_gates, decisions = dict(current_gates), {}
+    template = _gates_predict("template", {})
+    for gk in sorted(todo):
+        gid = cache.gate_id(gk)
+        old = current_gates.get(gid)
+        gate_val = [it for it in val_items if it.meta["gate"] == gk]
+        if not gate_val or not any(it.meta["gate"] == gk for it in train_items):
+            decisions[gk] = {"kept": False, "why": "needs accepted samples from training and held-out individuals"}
+            continue
+        if old is None and len(n_samples[gk]) < graduate:
+            decisions[gk] = {"kept": False, "why": f"{len(n_samples[gk])} accepted samples; a new gate needs {graduate}"}
+            continue
+        arch = json.loads((old / "recipe.json").read_text())["arch"] if old else (unito_arch or unet_model.unito_arch())
+        log(f"{lab}: training {gk} ({'from its current model' if old else 'new'}, {len(n_samples[gk])} samples)")
+        out = train.train(train.Config(
+            model="_candidate", arch=arch, channels=ds.UNITO_CHANNELS, gate_keys=[gk],
+            init=str(old) if old else None, out_name=f"{version}_{gid}",
+            **{**common, "lrs": (lr if old else 1e-3,)}), log=log)
+        d = vdir / "gates" / gid
+        shutil.rmtree(d, ignore_errors=True)
+        shutil.move(str(out), d)
+        err = frequency_errors(_gates_predict(f"{lab}/{version}", {gid: d}), gate_val)[gk]
+        base_err = frequency_errors(template, gate_val)[gk]
+        cur_err = frequency_errors(_gates_predict(f"{lab}/{current}", {gid: old}), gate_val)[gk] if old else None
+        kept = err < base_err and (cur_err is None or err < cur_err)
+        decisions[gk] = {"kept": kept, "held_out_error_pp": err, "template_copy_pp": base_err,
+                         "current_pp": cur_err, "warm_start": old is not None}
+        if kept:
+            new_gates[gid] = d
         else:
             shutil.rmtree(d)
-    promoted, reason = promotion_decision(before, cand_shared)
+
+    # Held-out comparison over every gate: the router's answer now vs the candidate's.
+    before = frequency_errors(_router_predict(lab, current), val_items)
+    after = frequency_errors(_gates_predict(f"{lab}/{version}", new_gates), val_items)
+    promoted, reason = promotion_decision(before, after)
+    graduated = sorted(g for g, d in new_gates.items() if current_gates.get(g) != d)
     registry.register_version(
-        lab, gates=keep, shared=shared_dir, parent=current, version=version,
-        metrics={"held_out_error_pp": {"current": before, "candidate": cand_shared},
+        lab, gates=new_gates, shared=None, parent=current, version=version,
+        metrics={"held_out_error_pp": {"current": before, "candidate": after},
                  "promoted": promoted, "reason": reason, "lr": lr, "patience": patience,
+                 "gates": decisions, "accepted_samples": sorted({it.meta["sample"] for it in items}),
                  "held_out_individuals": ds.individuals_of(val_items)},
         training_samples=sorted({it.meta["sample"] for it in train_items}),
-        notes="retrained from " + (str(init) if init else "ImageNet encoder"),
+        notes=f"per-gate UNITO retrain of {len(todo)} gate(s) from {current or 'template copy'}",
         make_current=promoted)
     log(f"{lab}: {version} {'promoted' if promoted else 'kept as candidate'}: {reason}")
-    return {"version": version, "promoted": promoted, "reason": reason,
-            "graduated": sorted(keep), "metrics": {"current": before, "candidate": cand_shared}}
+    return {"version": version, "promoted": promoted, "reason": reason, "graduated": graduated,
+            "gates": decisions, "metrics": {"current": before, "candidate": after}}
 
 
 def replace_polygons(result: GatingResult) -> dict[str, np.ndarray]:
