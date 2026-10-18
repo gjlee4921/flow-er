@@ -107,11 +107,16 @@ Unseen tissue (MO280: trained on mouse blood/spleen, tested on liver/aorta): no 
 lab's corrections, then retraining: the review-and-retrain loop is the product, not an extra.
 
 **Final routing:** per-gate UNITO where the lab has a trained model for that gate, otherwise
-template copy, flagged for review. Being changed now in `ml/` (same function names and JSON shapes,
+template copy, flagged for review. Done in `ml/` on 18 Oct (same function names and JSON shapes,
 so app code does not change):
-1. The router and `retrain()` drop the shared model; `retrain` trains per-gate UNITO only, for
-   gates with >= 15 accepted samples, and retrains only the gates with new corrections.
-2. A gate's model is used only if it beats template copy on that gate's held-out samples.
-3. The confidence threshold (now a fixed 0.6) is calibrated on held-out donors.
+1. The router and `retrain()` no longer use the shared model (bf28e0e); `retrain` trains per-gate
+   UNITO only, for the gates with new accepted samples and their child gates, warm-started at
+   lr 1e-4; a new gate needs >= 15 accepted samples (7897ff0).
+2. A gate's new model is kept only if it beats both its current model and template copy on that
+   gate's held-out samples (7897ff0).
+3. The confidence threshold is calibrated on validation donors and stored in the version
+   (fac4ad6): run `scripts/calibrate_confidence.py --lab als --wells <val wells json> --write` on
+   the screen 3 validation donors (4191, 7207). Until then autogate uses 0.6.
 4. Retraining a per-gate UNITO on a laptop CPU takes about 6–8 min per gate; it belongs in the
-   worker, never in a request.
+   worker, never in a request. `ml.retrain(lab, on="colab")` sends it to the Colab notebook through
+   `COLAB_JOBS_DIR`, and `on="auto"` falls back to the CPU when the notebook is quiet (8a74dcf).

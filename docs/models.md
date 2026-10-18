@@ -55,8 +55,8 @@ template copy.** The evidence:
   model transfers to a new tissue without that tissue's labels, so the correction-and-retrain
   loop (§3) is what handles it.
 
-The router and `retrain()` below still include the shared model; they are being changed to match
-this decision without changing any function names or JSON shapes.
+The router and `retrain()` below follow this decision (commits bf28e0e, 7897ff0): no shared or
+base model is routed or trained; function names and JSON shapes are unchanged.
 
 ## 2. The runtime: an FCS file in, gates out
 
@@ -88,19 +88,15 @@ ml.export_gatingml(result, template, "gates.xml") # GatingML 2.0 for FlowJo and 
 4. Traces the 0.5 contour into an editable polygon.
 5. Puts every parent cell inside the polygon into the gate; those cells become the next gate's parent.
 
-**Which model answers a gate.** The router takes the first of these that exists:
-1. the lab's current per-gate UNITO for that gate;
-2. the lab's current shared fine-tuned model;
-3. the base shared model;
-4. template copy.
-
-Time/QC gates always use the template.
+**Which model answers a gate.** The lab's current per-gate UNITO for that gate if the current
+version has one, otherwise template copy (flagged for review). Shared and base models stay on disk
+but are not routed. Time/QC gates always use the template.
 
 **Output** (`GatingResult`), for each gate:
 - the polygon in display units (0–1, what the user draws on) and in raw compensated units;
 - the event count, the parent count and % of parent;
 - which model answered;
-- a confidence (how decisive the model is near the boundary), with a `low_confidence` flag below 0.6 so the gate gets reviewed;
+- a confidence (how decisive the model is near the boundary), with a `low_confidence` flag below the version's calibrated threshold (0.6 until calibrated) so the gate gets reviewed;
 - optional plot data: the parent's 101 × 101 density and up to 20,000 sampled cells.
 
 Every event's membership is kept in memory for edits and exports.
@@ -143,12 +139,15 @@ ml.set_current("als", "v001")  # rollback
 - **Output:** the training files it wrote. Each accepted gate becomes one example: the parent density, the accepted gate as the target, the lab template, and the unstimulated well for cytokine gates. They're stored in the cache format under `data/_cache/v1/lab_<lab>/`.
 - **Held-out individuals:** about 20% of individuals, chosen by a hash of the individual id, are never trained on. They stay held out as labels accumulate, so successive versions are compared fairly.
 
-**`retrain`**
-- **Starting point:** the lab's current shared model, else the base model, else the ImageNet encoder.
-- **Training:** on all the lab's accepted examples, new and old (replay), at lr 1e-4. Early stopping with patience 40 on the held-out individuals' Dice. Drift augmentation is on.
-- **Graduation:** a gate with ≥ 15 accepted samples also gets its own per-gate UNITO. It's kept only if it beats the shared model on that gate.
-- **Promotion:** the new version becomes current only if the held-out mean frequency error is lower than with what the router uses now (for a new lab: the base model, or template copy without one), and no gate is more than 1 pp worse. Otherwise it's stored as a candidate and the old version stays current. The code decides; nothing else does.
-- **Output:** a version folder `models/labs/<lab>/<version>/` holding the shared model, any graduated per-gate models, `version.json` (metrics, the training sample ids, the parent version, the decision and its reason), and the `current` pointer.
+**`retrain`** (per-gate UNITO only; no shared model is trained)
+- **Which gates:** those with accepted samples the current version has not seen (or the `gates` you name), plus every gate below them. With nothing new, no version is written.
+- **Starting point:** a gate that has a model warm-starts from it at lr 1e-4, early stopping with patience 40 on the held-out individuals' Dice. A gate without one needs ≥ 15 accepted samples and starts fresh.
+- **Per-gate rule:** a gate's new model is kept only if its held-out error beats both its current model and template copy on that gate (the baseline). Otherwise the version keeps the old model, or template copy.
+- **Promotion (unchanged):** the new version becomes current only if the held-out mean frequency error is lower than with what the router uses now, and no gate is more than 1 pp worse. Otherwise it's stored as a candidate and the old version stays current. The code decides; nothing else does.
+- **Output:** a version folder `models/labs/<lab>/<version>/` holding the newly trained per-gate models, `version.json` (every gate's model, per-gate decisions and errors, the accepted and training sample ids, the parent version, the decision and its reason), and the `current` pointer.
+- **Speed:** warm-starting one gate on a laptop CPU takes about 5–8 min.
+
+**Confidence threshold.** `scripts/calibrate_confidence.py --lab als --wells val_wells.json --write` runs the full pipeline on validation donors (never the test donors), picks the threshold that best separates gates off by more than 1 pp, reports how many wrong gates the flags catch, and stores the threshold in the current version. Autogate uses it from then on. Not run yet: the ALS validation donors (4191, 7207) are in screen 3.
 
 **To enable it for a lab you need:**
 1. The ML packages installed: `uv sync --group ml`.
@@ -159,8 +158,17 @@ ml.set_current("als", "v001")  # rollback
 
 ## 4. Where training runs: CPU or GPU, and Colab
 
-**Training runs wherever the process that calls it runs.** `train.py` uses a CUDA GPU when
-PyTorch sees one and the CPU otherwise. Nothing in the code connects to Colab.
+**Training runs wherever the process that calls it runs**, unless it is sent to Colab.
+`train.py` uses a CUDA GPU when PyTorch sees one and the CPU otherwise.
+
+**Colab retraining (`ml.retrain(lab, on="colab" | "auto")`).** Set `COLAB_JOBS_DIR` to a Google
+Drive folder the notebook also mounts. The worker writes a job folder there (the lab's examples,
+the current gate models in fp16, `params.json`) and waits. The notebook loop touches `heartbeat`
+every few seconds and runs `ml.remote.run_job(job)` (the same `retrain` on the T4), which writes
+the new version and `summary.json` back. The worker copies the version into
+`models/labs/<lab>/` (weights back to fp32) and applies the normal promotion. `"auto"` uses the
+CPU when the heartbeat is older than 3 minutes. Tested with a fake notebook
+(`tests/ml/test_remote.py`).
 
 - **On this laptop** (CPU only, Intel Core Ultra 5, no CUDA GPU), measured per batch of 8:
 
