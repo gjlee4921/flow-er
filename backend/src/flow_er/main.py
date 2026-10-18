@@ -59,7 +59,8 @@ def current_settings() -> dict:
     return {
         **health(),
         "agent_max_rounds": settings.agent_max_rounds,
-        "data_dir": str(settings.data_dir), "models_dir": str(settings.models_dir),
+        "data_dir": str(settings.data_dir), "datasets_dir": str(settings.datasets_dir),
+        "models_dir": str(settings.models_dir),
         "workspace_dir": str(settings.workspace_dir),
         "import_roots": [r.strip() for r in settings.import_roots.split(",") if r.strip()],
         "upload_max_mb": settings.upload_max_mb,

@@ -16,7 +16,7 @@ from flow_er.workspace import data, store
 mcp = MCPServer("flow-er")
 
 
-@mcp.tool(description="List the datasets under DATA_DIR and the experiments already made.")
+@mcp.tool(description="List the datasets under DATASETS_DIR and the experiments already made.")
 def experiments() -> str:
     return json.dumps({"datasets": data.find_datasets(), "experiments": store.list_all()}, default=str)
 

@@ -168,7 +168,7 @@ export default function Start() {
             <section className="st-sec">
               <div className="st-h2row"><h2>Datasets</h2>{datasets && <span className="db-count">{q ? `${data.length} of ${datasets.length}` : datasets.length}</span>}</div>
               <div className="ds-mini-grid">
-                {isLoading && <span className="thinking"><Flower /><span className="shimmer">Looking in DATA_DIR…</span></span>}
+                {isLoading && <span className="thinking"><Flower /><span className="shimmer">Looking in DATASETS_DIR…</span></span>}
                 {data.map((d) => (
                   <button key={d.name} data-feeds-dock className={`ds-mini${chosen?.name === d.name ? " on" : ""}`} aria-pressed={chosen?.name === d.name}
                     onClick={() => choose(d)} onDoubleClick={() => start(d)}

@@ -10,7 +10,7 @@ frontend/   React + TypeScript (Vite, pnpm)
 docs/       architecture, decisions, specs
 ```
 
-Data, trained models and experiment workspaces live outside the repo, next to it in `../data`, `../models` and `../workspaces` (override with `DATA_DIR` / `MODELS_DIR` / `WORKSPACE_DIR`, see `backend/.env.example`).
+Data, trained models and experiment workspaces live outside the repo, next to it in `../data`, `../models` and `../workspaces` (override with `DATA_DIR` / `MODELS_DIR` / `WORKSPACE_DIR`, see `backend/.env.example`). The app's start page lists only `../data/demo` (`DATASETS_DIR`): files no model was trained on.
 
 ## Docs
 
@@ -40,7 +40,7 @@ cd backend && uv run uvicorn flow_er.main:app --reload --app-dir src --port 8040
 cd frontend && FLOW_ER_API=http://localhost:8040 FLOW_ER_PORT=5180 pnpm dev
 ```
 
-Put a folder of FCS files (with its FlowJo workspace, if there is one) under `DATA_DIR`; it appears on the start screen.
+Put a folder of FCS files (with its FlowJo workspace, if there is one) under `DATASETS_DIR`; it appears on the start screen.
 
 ## The agent
 

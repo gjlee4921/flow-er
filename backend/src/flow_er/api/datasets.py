@@ -1,6 +1,6 @@
 """Bringing data in: example folders, files uploaded on the start page, and folders on this machine
-read in place. Data stays outside the repo, under DATA_DIR: uploads in uploads/<date>-<name>/, links
-in linked/<name> (a link to the folder, nothing copied)."""
+read in place. Data stays outside the repo, under DATASETS_DIR: uploads in uploads/<date>-<name>/,
+links in linked/<name> (a link to the folder, nothing copied)."""
 import os
 import re
 import shutil
@@ -24,7 +24,7 @@ class LinkIn(BaseModel):
 
 
 def _base() -> Path:
-    return Path(os.path.abspath(settings.data_dir.expanduser()))
+    return Path(os.path.abspath(settings.datasets_dir.expanduser()))
 
 
 def _slug(text: str) -> str:

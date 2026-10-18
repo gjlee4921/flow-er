@@ -36,6 +36,7 @@ Full product description: the flow-er PRD (Confluence, "Reinvent the wheel" page
     - `autogate.py`: the runtime from the command line.
 - **frontend/**: React + TypeScript (Vite). The chat is in the middle, the plan in the sidebar, and the workflow panel on the right shows the pipeline, results, measurements and models. The data lab takes the whole screen, with a plot, a stats sheet, saved diagrams and its own assistant. The API client is hand-typed for now; `pnpm gen:api` can generate it from the backend's OpenAPI schema.
 - **Outside the repo**:
-  - **Data** (`DATA_DIR`, default `../data`): the datasets (FCS + FlowJo workspaces), `_splits/` (dataset registry and frozen split; they name donors, so never in git), `_cache/v1/` (model inputs, [cache-format.md](cache-format.md)) and `_results/`.
+  - **Data** (`DATA_DIR`, default `../data`): the datasets (FCS + FlowJo workspaces), `_splits/` (dataset registry and frozen split; they name donors, so never in git), `_cache/v1/` (model inputs, [cache-format.md](cache-format.md), including each lab's kept gates in `lab_<lab>/`) and `_results/`.
+  - **Demo datasets** (`DATASETS_DIR`, default `../data/demo`): the only folders the start page lists, plus uploads and linked folders. Only files no model was trained on, so the app never shows training data.
   - **Models** (`MODELS_DIR`, default `../models`): `base/shared/`, `labs/<lab>/<version>/`, and the research runs.
   - **Workspaces** (`WORKSPACE_DIR`, default `../workspaces`): one folder per experiment.

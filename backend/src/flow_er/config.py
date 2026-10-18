@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=_ENV_FILE, extra="ignore")
 
     data_dir: Path = _OUTSIDE_REPO / "data"
+    # What the start page lists, and where uploads and linked folders go: only the demo set, so
+    # files the models were trained on never show up in the app. Research data stays in data_dir.
+    datasets_dir: Path = _OUTSIDE_REPO / "data" / "demo"
     models_dir: Path = _OUTSIDE_REPO / "models"
     # One folder per experiment: plan, gates, views, journal, chat. Kept outside the repo.
     workspace_dir: Path = _OUTSIDE_REPO / "workspaces"

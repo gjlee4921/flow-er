@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 
 
 class NewExperiment(BaseModel):
-    dataset: str = Field(description="A dataset name from GET /datasets, or a folder path under DATA_DIR")
+    dataset: str = Field(description="A dataset name from GET /datasets, or a folder path under DATASETS_DIR")
     title: str | None = None
 
 

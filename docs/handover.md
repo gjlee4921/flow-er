@@ -7,7 +7,7 @@ JSON shapes: [runtime-api.md](runtime-api.md). Models, routing and fine-tuning: 
 ## 1. What lives outside git
 
 Data and models are never committed. They sit next to the repo (defaults in
-`backend/src/flow_er/config.py`; override with `DATA_DIR` / `MODELS_DIR`):
+`backend/src/flow_er/config.py`; override with `DATA_DIR` / `DATASETS_DIR` / `MODELS_DIR`):
 
 ```
 reinvent-the-wheel/
@@ -17,11 +17,12 @@ reinvent-the-wheel/
     labs/als/current               one line: the active version (v003)
     labs/als/v003/version.json     gate -> model folder, metrics, training samples
     labs/als/template.json         the ALS lab template (GateTree JSON, 16 gates)
+    labs/mo280/                    mouse lab: v001 points every mouse gate at a human UNITO model;
+                                   later versions are those models adapted by retrain (see models.md)
     base/shared/                   optional: the shared U-Net (55 MB), see §4
-  data/                            DATA_DIR
-    als_ics_screen4/               demo input: 24 FCS files (8 donors x 3 wells: unstimulated, peptide,
-                                   positive control; 6 of the donors were never used in training)
-                                   and the expert's two FlowJo workspaces (for comparison overlays)
+  data/                            DATA_DIR (research; the app reads _cache/v1/lab_<lab>/ here)
+    demo/                          DATASETS_DIR: the only folders the start page lists. Only files
+                                   no model was trained on (README.md inside says what each is)
 ```
 
 What each part is for:
@@ -31,7 +32,7 @@ What each part is for:
 | `models/als/unito_gpu/` | The trained gate models (from the Colab GPU run) | No model can gate |
 | `models/labs/als/` | Tells the router which weights belong to lab `als`, which version is current, and the lab's template. A few KB | Every gate silently falls back to template copy |
 | `models/base/shared/` | Fallback for gates with no per-gate model (being removed, §4) | Those gates use template copy, which tested as good or better |
-| `data/als_ics_screen4/` | Unseen FCS files to demo on, plus the expert's gates to compare against | Use any FCS files from the same panel |
+| `data/demo/` | Unseen FCS files to demo on (human ALS screen 4 test donors, MO280 mice and tissues no lab version learned from, ...), with the expert's FlowJo workspaces to compare against | The start page is empty |
 
 Not needed for the app: `data/_cache`, `data/_splits`, `data/_results` and the other datasets are
 research and evaluation files. Training data for a lab is created by the app itself, from the

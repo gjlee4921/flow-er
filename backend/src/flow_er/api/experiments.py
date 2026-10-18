@@ -31,12 +31,12 @@ def experiments(archived: bool = False) -> list[dict]:
 
 @router.post("/experiments")
 def create(body: NewExperiment) -> dict:
-    # Containment is checked on the path as written, so a folder linked into DATA_DIR counts as inside.
-    base = Path(os.path.abspath(settings.data_dir.expanduser()))
+    # Containment is checked on the path as written, so a folder linked into DATASETS_DIR counts as inside.
+    base = Path(os.path.abspath(settings.datasets_dir.expanduser()))
     known = {d["name"]: d["path"] for d in data.find_datasets()}
     folder = Path(os.path.abspath(Path(known.get(body.dataset, body.dataset)).expanduser()))
     if base not in folder.parents and folder != base:
-        raise HTTPException(400, "the dataset must be inside DATA_DIR")
+        raise HTTPException(400, "the dataset must be inside DATASETS_DIR")
     if not any(folder.rglob("*.fcs")):
         raise HTTPException(400, f"no FCS files in {folder.name}")
     meta = store.create(folder, body.title or folder.name.replace("_", " "))

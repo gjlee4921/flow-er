@@ -39,7 +39,7 @@ log = logging.getLogger(__name__)
 
 
 FCS_VERSION = re.compile(rb"^FCS[23]\.\d")
-# DATA_DIR/uploads/<name> holds files brought in through the start page; DATA_DIR/linked/<name> is a
+# DATASETS_DIR/uploads/<name> holds files brought in through the start page; DATASETS_DIR/linked/<name> is a
 # link to a folder elsewhere on this machine, read in place. Any other folder is an example dataset.
 CONTAINERS = {"uploads": "upload", "linked": "folder"}
 
@@ -88,8 +88,8 @@ def describe_dataset(d: Path, name: str, kind: str) -> dict | None:
 
 
 def find_datasets() -> list[dict]:
-    """Folders under DATA_DIR that hold FCS files: examples, uploads and linked folders."""
-    base = Path(os.path.abspath(settings.data_dir.expanduser()))
+    """Folders under DATASETS_DIR that hold FCS files: examples, uploads and linked folders."""
+    base = Path(os.path.abspath(settings.datasets_dir.expanduser()))
     if not base.exists():
         return []
     brought: list[tuple[float, dict]] = []
