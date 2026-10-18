@@ -10,7 +10,7 @@ import {
   type Edge as RFEdge, type Node as RFNode, type NodeProps,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { api, type Execution, type ExperimentState, type LabJob, type Script, type Step } from "../../api";
+import { api, type Execution, type ExperimentState, type LabJob, type Script, type Step, type ViewSpec } from "../../api";
 import {
   followRun, refresh, useAutogateFiles, useAutogateResult, useExecutions, useGates, useLabModels, useNodeTypes, useSamples, useStepImages, useStepOutput,
 } from "../../api/hooks";
@@ -48,7 +48,7 @@ function StepCard({ id, data: d }: NodeProps<RFNode<Card>>) {
     <div className={`node ${d.status} k-${d.kind}${st ? ` ran-${st}` : ""}${st === "running" ? " running" : ""}${d.build != null ? " build" : ""}${d.selected ? " sel" : ""}`}
       style={{ width: NW, ["--k" as string]: KIND_COL[d.kind] ?? KIND_COL.source, ["--i" as string]: d.build ?? 0 }}>
       {d.inputs.length > 0 && <Handle type="target" position={d.down ? Position.Top : Position.Left} className="port in" isConnectable={false} />}
-      <Handle type="source" position={d.down ? Position.Bottom : Position.Right} className="port out" isConnectable={false} />
+      {d.outputs.length > 0 && <Handle type="source" position={d.down ? Position.Bottom : Position.Right} className="port out" isConnectable={false} />}
       <span className="nic"><I /></span>
       <span style={{ minWidth: 0 }}><b>{d.title}</b><small>{d.run?.summary || d.sub}</small></span>
       {d.status === "draft" ? <span className="badge">draft</span>
@@ -94,10 +94,21 @@ function Canvas({ s }: { s: ExperimentState }) {
     const src: Card[] = [{ id: "fcs", kind: "source", title: "FCS files", sub: `${s.snapshot.samples.length} files`, status: "done", outputs: ["fcs"], inputs: [] }];
     if (s.snapshot.flowjo_workspace) src.push({ id: "wsp", kind: "source", title: "FlowJo workspace", sub: s.snapshot.flowjo_workspace, status: "done", outputs: ["wsp"], inputs: [] });
     if (s.snapshot.uploads.length) src.push({ id: "uploads", kind: "source", title: "Added in the chat", sub: `${s.snapshot.uploads.length} files`, status: "done", outputs: ["uploads"], inputs: [] });
-    return src.concat(steps.map((st) => ({
+    const stepCards: Card[] = steps.map((st) => ({
       id: st.id, kind: st.kind, title: st.title, sub: st.op === "custom_macro" ? "script" : st.op.replace(/_/g, " "), step: st,
       status: draftPlan && !same(st, kept[st.id]) ? "draft" : building ? "building" : lastRun[st.id]?.status ?? "planned", outputs: st.outputs, inputs: st.inputs,
-    })));
+    }));
+    // the Results lane: the figures, each drawn from the table it reads (a waiting one dashed), or a
+    // card saying how to get one; figures are not plan steps, so nothing else would put them here
+    const draftView = s.draft?.kind === "view" ? (s.draft.payload as ViewSpec) : null;
+    const figs = [...s.views.filter((v) => v.id !== draftView?.id), ...(draftView ? [draftView] : [])];
+    const figCards: Card[] = figs.map((v, i) => ({
+      id: `fig:${v.id}`, kind: "view", title: v.title, sub: `Figure ${i + 1} · ${v.type === "table" ? "table" : `${v.type} chart`}`,
+      status: v === draftView ? "draft" : "done", outputs: [], inputs: [v.table], fig: true,
+    }));
+    if (!figCards.length && steps.length && !building)
+      figCards.push({ id: "fig:none", kind: "view", title: "No figures yet", sub: "Ask for a figure or a write-up in the chat", status: "planned", outputs: [], inputs: [], fig: true });
+    return src.concat(stepCards, figCards);
   }, [s, steps, draftPlan, building, lastRun, kept]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pos = useMemo(() => {
@@ -105,13 +116,13 @@ function Canvas({ s }: { s: ExperimentState }) {
     const out: Record<string, [number, number]> = {};
     const lane: Record<string, number> = {};
     for (const n of cards) {
-      // a stage per lane; a script sits with the latest stage it reads from (one reading the counts
-      // goes under Measure), so its lines run forward instead of climbing back
+      // a stage per lane; a script sits with the latest stage it reads from (one reading the counts,
+      // the measured ones or the models', goes under Measure), so its lines run forward instead of climbing back
       let c = Math.max(0, COLS.indexOf(n.kind as (typeof COLS)[number]));
       if (n.step?.op === "custom_macro") {
         for (const i of n.inputs) {
           const from = cards.find((m) => m.outputs.includes(i));
-          if (from && lane[from.id] != null) c = Math.max(c, lane[from.id]);
+          if (from && lane[from.id] != null) c = Math.max(c, from.step?.op === "autogate" ? COLS.indexOf("measure") : lane[from.id]);
         }
       }
       lane[n.id] = c;
@@ -188,7 +199,7 @@ function Canvas({ s }: { s: ExperimentState }) {
     <div className={`flow-wrap flow-rf${showRuns || selCard?.step ? " side" : ""}`} ref={wrap}>
       <ReactFlow nodes={nodes} edges={edges} nodeTypes={NODE_TYPES} minZoom={0.3} maxZoom={1.6} proOptions={{ hideAttribution: true }}
         nodesConnectable={false} nodesDraggable={false} zoomOnScroll={false} panOnScroll zoomActivationKeyCode="Meta"
-        onNodeClick={(_, n) => setSel(sel === n.id ? null : n.id)} onPaneClick={() => setSel(null)}>
+        onNodeClick={(_, n) => (n.data.fig ? ui.open("results") : setSel(sel === n.id ? null : n.id))} onPaneClick={() => setSel(null)}>
         <Background gap={22} size={1.2} color="var(--sep-2)" />
         <ViewportPortal>
           {COLS.map((c, i) => <div key={c} className="lane-label" style={{ position: "absolute", transform: down ? `translate(30px, ${16 + i * ROWD}px)` : `translate(${30 + i * COLW}px, 12px)` }}>{COL_NAME[c]}</div>)}

@@ -296,11 +296,13 @@ export default function DataLab({ s }: { s: ExperimentState }) {
               </button>
               {tree.map((g) => {
                 const depth = g.key.split("/").length;
+                // a model gate shows its name and a "model" tag rather than "(model)" in the name, so deep trees stay readable
+                const m = g.name.match(/^(.*) \((model(?: \d+)?)\)$/);
                 return (
-                  <button key={g.key} className="n-row" aria-selected={lab.sel === g.key} style={{ paddingLeft: 6 + depth * 11 }}
-                    onClick={() => select(g)} onDoubleClick={() => enter(g.key)} title="Click to show it on its own channels; double-click to look inside it">
-                    <span className="tw" /><span className="nm">{g.name}</span>
-                    {g.draft && <span className="n-pill orange">new</span>}
+                  <button key={g.key} className="n-row" aria-selected={lab.sel === g.key} style={{ paddingLeft: 6 + Math.min(depth, 8) * 8 }}
+                    onClick={() => select(g)} onDoubleClick={() => enter(g.key)} title={`${g.name}: click to show it on its own channels; double-click to look inside it`}>
+                    <span className="tw" /><span className="nm">{m ? m[1] : g.name}</span>
+                    {m ? <span className={`n-pill ${g.draft ? "orange" : "gray"}`}>{m[2]}</span> : g.draft && <span className="n-pill orange">new</span>}
                     <span className="val">{g.pct_parent.toFixed(1)}%</span>
                   </button>
                 );
@@ -357,14 +359,20 @@ export default function DataLab({ s }: { s: ExperimentState }) {
               <div className="lab-extra" id="lab-extra">
                 {lab.sel && (
                   <div className="ls-block"><div className="n-h">{sel?.name ?? ""} in every file</div>
-                    <div className="across">{across.map((a) => {
-                      const v = a.g?.pct_parent ?? 0, mx = Math.max(1e-9, ...across.map((q) => q.g?.pct_parent ?? 0));
-                      return (
-                        <button key={a.id} className={`ab${a.id === sample ? " on" : ""}`} title={`${a.id}: ${v.toFixed(2)}%`} onClick={() => ui.lab({ sample: a.id })}>
-                          <i style={{ height: `${Math.max(2, (v / mx) * 100)}%` }} /><span>{shortSample(a.id)}</span><b>{v.toFixed(1)}%</b>
-                        </button>
-                      );
-                    })}</div></div>
+                    {/* one row per file, so any number of files fits the panel; a file without this gate shows a dash, not 0% */}
+                    <div className="across">{(() => {
+                      const mx = Math.max(1e-9, ...across.map((q) => q.g?.pct_parent ?? 0));
+                      return across.map((a) => {
+                        const v = a.g?.pct_parent;
+                        return (
+                          <button key={a.id} className={`ab${a.id === sample ? " on" : ""}`} title={`${a.id}: ${v == null ? "no such gate in this file" : `${v.toFixed(2)}%`}`} onClick={() => ui.lab({ sample: a.id })}>
+                            <span className="ab-n">{shortSample(a.id)}</span>
+                            <span className="ab-t"><i style={{ width: v == null ? 0 : `${Math.max(1.5, (v / mx) * 100)}%` }} /></span>
+                            <b>{v == null ? "—" : `${v.toFixed(1)}%`}</b>
+                          </button>
+                        );
+                      });
+                    })()}</div></div>
                 )}
                 <div className="ls-key">
                   {lab.stage === "labels" ? (

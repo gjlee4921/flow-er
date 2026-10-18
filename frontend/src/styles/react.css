@@ -8,9 +8,11 @@
 .a .md ul, .a .md ol { padding-left: 20px; display: grid; gap: 4px; }
 .a .md code { font: 12.5px var(--mono); background: var(--fill); padding: 1px 5px; border-radius: 5px; }
 .a .md table { border-collapse: collapse; font-size: 13px; width: 100%; display: block; overflow-x: auto; }
-.a .md th, .a .md td { padding: 6px 10px; border-bottom: 1px solid var(--sep); text-align: left; white-space: nowrap; }
-.a .md th { font-weight: 500; color: var(--text-3); font-size: 12px; }
-.a .md td:not(:first-child), .a .md th:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+.a .md th, .a .md td { padding: 6px 10px; border-bottom: 1px solid var(--sep); vertical-align: top; }
+.a .md th { font-weight: 500; color: var(--text-3); font-size: 12px; white-space: nowrap; }
+.a .md td { min-width: 4em; }
+.a .md td:first-child { min-width: 8em; }
+.a .md td[align="right"] { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .a.intro p { margin: 0 0 8px; }
 .act { margin-bottom: 4px; }
 .act > button { all: unset; display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-3); cursor: pointer; padding: 2px 0; }
@@ -81,12 +83,17 @@
 .lab-busy { position: absolute; right: 10px; top: 10px; width: 8px; height: 8px; border-radius: 50%; background: var(--c-trt); opacity: .6; animation: pulse 1s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: .15; } }
 .lab-loading { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; gap: 8px; align-items: center; color: var(--text-3); font-size: 13px; }
-.across { display: flex; align-items: flex-end; gap: 8px; height: 120px; padding-top: 6px; }
-.across .ab { all: unset; flex: 1; min-width: 36px; height: 100%; display: grid; grid-template-rows: minmax(0, 1fr) auto auto; justify-items: center; gap: 3px; cursor: pointer; }
-.across .ab i { align-self: end; width: 70%; max-width: 46px; border-radius: 5px 5px 2px 2px; background: color-mix(in srgb, var(--c-trt) 45%, transparent); transition: background .15s; }
-.across .ab.on i, .across .ab:hover i { background: var(--c-trt); }
-.across .ab span { font-size: 10.5px; color: var(--text-3); }
-.across .ab b { font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.across { display: grid; gap: 1px; max-height: 268px; overflow-y: auto; overscroll-behavior: contain; padding-top: 4px; }
+.across .ab { all: unset; display: grid; grid-template-columns: minmax(0, 8em) minmax(0, 1fr) 3.6em; align-items: center; gap: 10px; padding: 4px 6px; border-radius: var(--r-tag); cursor: pointer; }
+.across .ab:hover { background: var(--hover); }
+.across .ab.on { background: var(--hi); }
+.across .ab:focus-visible { outline: 2px solid var(--c-trt); outline-offset: -2px; }
+.across .ab-n { font-size: 11.5px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.across .ab.on .ab-n { color: var(--text); font-weight: 600; }
+.across .ab-t { height: 8px; border-radius: 4px; background: var(--fill); overflow: hidden; }
+.across .ab-t i { display: block; height: 100%; border-radius: 4px; background: color-mix(in srgb, var(--c-trt) 45%, transparent); transition: background .15s, width .2s var(--ease); }
+.across .ab.on .ab-t i, .across .ab:hover .ab-t i { background: var(--c-trt); }
+.across .ab b { font-size: 11.5px; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
 .lab-v-doc tbody tr { cursor: pointer; }
 /* saved diagrams in the data lab: a gallery of kept figures, then one figure with the table behind it */
 .lab-saved tbody tr { cursor: default; }
