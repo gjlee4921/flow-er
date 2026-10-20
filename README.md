@@ -30,6 +30,8 @@ In this repo:
 - [runtime-api.md](docs/runtime-api.md): exact JSON shapes for the gating runtime and the endpoints they back
 - [decisions.md](docs/decisions.md), [cache-format.md](docs/cache-format.md)
 
+The trained models and their model card: [huggingface.co/gjlee4921/flow-er](https://huggingface.co/gjlee4921/flow-er).
+
 ## Layout
 
 ```
@@ -38,7 +40,7 @@ frontend/   React + TypeScript (Vite, pnpm)
 docs/       architecture, decisions, specs
 ```
 
-Data, trained models and experiment workspaces live outside the repo, next to it in `../data`, `../models` and `../workspaces` (override with `DATA_DIR` / `MODELS_DIR` / `WORKSPACE_DIR`, see `backend/.env.example`). The app's start page lists only `../data/demo` (`DATASETS_DIR`): files no model was trained on. Donor data, trained weights and the splits never go in git.
+Data, trained models and experiment workspaces live outside the repo, next to it in `../data`, `../models` and `../workspaces` (override with `DATA_DIR` / `MODELS_DIR` / `WORKSPACE_DIR`, see `backend/.env.example`). The app's start page lists only `../data/demo` (`DATASETS_DIR`): files no model was trained on. Donor data, trained weights and the splits never go in git; the trained models are downloaded from [Hugging Face](https://huggingface.co/gjlee4921/flow-er) (see [Download the models](#download-the-models)).
 
 ## Run (development)
 
@@ -78,6 +80,24 @@ cd backend && uv run python -m flow_er.mcp.server
 `flow_er.ml` gates an FCS file with a lab's template (`ml.autogate`), takes the expert's edits, and fine-tunes per lab from accepted gates (`ml.add_labels`, `ml.retrain`, on the CPU or a Colab GPU); see [models.md](docs/models.md). Command line: `cd backend && uv run python scripts/autogate.py --help`.
 
 The weights live in `../models` (see [handover.md](docs/handover.md)). Lab `als` (human ALS ICS panel) uses 11 per-gate models trained on a Colab GPU. Lab `mo280` (mouse) starts each of its 33 gates from the human model with the same kind of plot, and is adapted by retraining. The start page shows each lab as live, outdated (3 or more taught files the current version hasn't learned from) or offline.
+
+### Download the models
+
+The trained models are on Hugging Face: **[gjlee4921/flow-er](https://huggingface.co/gjlee4921/flow-er)** (MIT, about 3.4 GB). The repo mirrors `MODELS_DIR`, so download it next to this repo as `../models`:
+
+```bash
+pip install -U huggingface_hub
+hf download gjlee4921/flow-er --local-dir models          # from the folder that holds flow-er/
+cd flow-er/backend && uv run python scripts/check_models.py verify
+```
+
+What it holds:
+
+- `als/unito_gpu/<gate_id>/`: the 11 per-gate models for the human ALS ICS panel. Each is `model.pt` (124 MB, 31.0M parameters) and `recipe.json` (channels, image recipe, training donors, hyperparameters, validation Dice).
+- `labs/als/`: lab `als`: its template (16 gates) and the current version v003, which routes the 11 gates to those models; the other 5 use template copy.
+- `labs/mo280/`: lab `mo280` (mouse, 33 gates): its template, its held-out mice, and every version. v001 points each mouse gate at a human model; v004 (current) is those models adapted by three rounds of retraining. v002 and v003 keep their per-gate decisions and held-out errors, plus only the weights v004 still uses. Mouse weights are stored as float16 and loaded into float32.
+
+Each lab version's `version.json` maps every gate to its model, with the retrain decisions and held-out errors. The weights are flow-er's own, trained from the UNITO paper's description; they are not the UNITO authors' weights. They fit only the panels and gates they were trained for: a new panel starts from template copy and learns from its accepted gates. Training data: ALS ICS (Zenodo 16754591, 16754609) and MO280 (Figshare 32996177), both CC BY 4.0.
 
 UNITO's own code has a no-redistribution licence, so flow-er implements the model from the paper alone; nothing is copied or adapted from that repository.
 

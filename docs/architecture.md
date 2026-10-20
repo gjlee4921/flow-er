@@ -38,5 +38,5 @@ On Confluence, under "Reinvent the wheel": the flow-er PRD (the product), the fl
 - **Outside the repo**:
   - **Data** (`DATA_DIR`, default `../data`): the datasets (FCS + FlowJo workspaces), `_splits/` (dataset registry and frozen split; they name donors, so never in git), `_cache/v1/` (model inputs, [cache-format.md](cache-format.md), including each lab's kept gates in `lab_<lab>/`) and `_results/`.
   - **Demo datasets** (`DATASETS_DIR`, default `../data/demo`): the only folders the start page lists, plus uploads and linked folders. Only files no model was trained on, so the app never shows training data.
-  - **Models** (`MODELS_DIR`, default `../models`): `base/shared/`, `labs/<lab>/<version>/`, and the research runs.
+  - **Models** (`MODELS_DIR`, default `../models`): `base/shared/`, `labs/<lab>/<version>/`, and the research runs. The models the labs use are published on Hugging Face ([gjlee4921/flow-er](https://huggingface.co/gjlee4921/flow-er)) in this layout.
   - **Workspaces** (`WORKSPACE_DIR`, default `../workspaces`): one folder per experiment.

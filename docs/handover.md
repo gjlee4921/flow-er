@@ -7,7 +7,11 @@ JSON shapes: [runtime-api.md](runtime-api.md). Models, routing and fine-tuning: 
 ## 1. What lives outside git
 
 Data and models are never committed. They sit next to the repo (defaults in
-`backend/src/flow_er/config.py`; override with `DATA_DIR` / `DATASETS_DIR` / `MODELS_DIR`):
+`backend/src/flow_er/config.py`; override with `DATA_DIR` / `DATASETS_DIR` / `MODELS_DIR`).
+The `models/` folder is published on Hugging Face as
+[gjlee4921/flow-er](https://huggingface.co/gjlee4921/flow-er) in this same layout (everything below
+except `base/shared/`); get it with `hf download gjlee4921/flow-er --local-dir models` from
+`reinvent-the-wheel/` (§2).
 
 ```
 reinvent-the-wheel/
@@ -17,8 +21,9 @@ reinvent-the-wheel/
     labs/als/current               one line: the active version (v003)
     labs/als/v003/version.json     gate -> model folder, metrics, training samples
     labs/als/template.json         the ALS lab template (GateTree JSON, 16 gates)
-    labs/mo280/                    mouse lab: v001 points every mouse gate at a human UNITO model;
-                                   later versions are those models adapted by retrain (see models.md)
+    labs/mo280/                    mouse lab (33 gates): v001 points every mouse gate at a human UNITO
+                                   model; v004 (current) is those models adapted by three retrains
+                                   (float16 on disk, loaded as float32; see models.md)
     base/shared/                   optional: the shared U-Net (55 MB), see §4
   data/                            DATA_DIR (research; the app reads _cache/v1/lab_<lab>/ here)
     demo/                          DATASETS_DIR: the only folders the start page lists. Only files
@@ -44,7 +49,11 @@ privately with the team; never commit it.
 ## 2. Set up and check
 
 ```bash
-cd backend
+# from reinvent-the-wheel/ (the folder that holds flow-er/): the models, about 3.4 GB
+pip install -U huggingface_hub
+hf download gjlee4921/flow-er --local-dir models
+
+cd flow-er/backend
 uv sync                                       # app + gating models (PyTorch CPU)
 uv run python scripts/check_models.py verify  # every model folder has weights that load
 ```

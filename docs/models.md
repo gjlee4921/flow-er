@@ -201,6 +201,12 @@ benchmarks are the ALS per-donor test and the MO280 unseen-tissue test (`phase1-
 
 ## 6. Getting the trained weights into the router
 
+The released weights (lab `als` v003 with its 11 GPU models, lab `mo280` v001–v004) are on Hugging
+Face at [gjlee4921/flow-er](https://huggingface.co/gjlee4921/flow-er), laid out like `models/`:
+`hf download gjlee4921/flow-er --local-dir <MODELS_DIR>`, then `check_models.py verify`. They are
+already registered (each lab's `current` and `version.json` are included), so `register` is not
+needed. The steps below are for weights from a new Colab run.
+
 The GPU-trained weights are made on Colab. Copy them into `models/` (same layout) and check them
 with `backend/scripts/check_models.py`, in this order:
 
